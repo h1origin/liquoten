@@ -1,4 +1,4 @@
-// liquoten-cred daemon：定时轮询各 provider 的额度，写缓存、记历史、发告警。
+// liquoten daemon：定时轮询各 provider 的额度，写缓存、记历史、发告警。
 // 由 launchd 常驻运行；SwiftBar 插件只读它写出的 state.json。
 package main
 
@@ -22,7 +22,7 @@ import (
 func main() {
 	configPath := flag.String("config", config.DefaultPath(), "配置文件路径（默认 ~/.config/liquoten/config.toml）")
 	once := flag.Bool("once", false, "只轮询一次后退出（调试用）")
-	cacheDir := flag.String("cache-dir", store.DefaultDir(), "缓存目录（默认 ~/.cache/liquoten-cred）")
+	cacheDir := flag.String("cache-dir", store.DefaultDir(), "缓存目录（默认 ~/.cache/liquoten）")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -44,7 +44,7 @@ func main() {
 	for _, p := range provs {
 		names = append(names, p.Name())
 	}
-	log.Printf("liquoten-cred 启动：providers=[%s] 轮询间隔=%s 缓存目录=%s", strings.Join(names, ","), interval(cfg), *cacheDir)
+	log.Printf("liquoten 启动：providers=[%s] 轮询间隔=%s 缓存目录=%s", strings.Join(names, ","), interval(cfg), *cacheDir)
 
 	poll := func() {
 		var balances []providers.Balance

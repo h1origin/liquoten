@@ -1,4 +1,4 @@
-# liquoten-cred 示例配置。复制到 ~/.config/liquoten/config.toml 后按需修改。
+# liquoten 示例配置。复制到 ~/.config/liquoten/config.toml 后按需修改。
 #
 # 说明：
 #   - 出现在 [providers.xxx] 里的 provider 默认启用，除非显式 enabled = false

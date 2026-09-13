@@ -21,16 +21,16 @@ type Store struct{ dir string }
 // New 指定缓存目录。
 func New(dir string) *Store { return &Store{dir: dir} }
 
-// DefaultDir 返回默认缓存目录（可用 LIQUOTEN_CRED_CACHE_DIR 覆盖）。
+// DefaultDir 返回默认缓存目录（可用 LIQUOTEN_CACHE_DIR 覆盖）。
 func DefaultDir() string {
-	if d := os.Getenv("LIQUOTEN_CRED_CACHE_DIR"); d != "" {
+	if d := os.Getenv("LIQUOTEN_CACHE_DIR"); d != "" {
 		return d
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".liquoten-cred"
+		return ".liquoten"
 	}
-	return filepath.Join(home, ".cache", "liquoten-cred")
+	return filepath.Join(home, ".cache", "liquoten")
 }
 
 func (s *Store) ensureDir() error { return os.MkdirAll(s.dir, 0o755) }

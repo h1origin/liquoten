@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.liquoten-cred</string>
+	<string>com.liquoten</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/lk/.local/bin/liquoten-cred</string>
+		<string>/Users/lk/.local/bin/liquoten</string>
 		<string>-config</string>
 		<string>/Users/lk/.config/liquoten/config.toml</string>
 	</array>
@@ -17,8 +17,8 @@
 	<key>ProcessType</key>
 	<string>Background</string>
 	<key>StandardOutPath</key>
-	<string>/Users/lk/Library/Logs/liquoten-cred.log</string>
+	<string>/Users/lk/Library/Logs/liquoten.log</string>
 	<key>StandardErrorPath</key>
-	<string>/Users/lk/Library/Logs/liquoten-cred.log</string>
+	<string>/Users/lk/Library/Logs/liquoten.log</string>
 </dict>
 </plist>

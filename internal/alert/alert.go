@@ -68,7 +68,7 @@ func (e *Engine) Check(balances []providers.Balance) error {
 			e.failCount[b.Provider]++
 			if e.failCount[b.Provider] == maxConsecutiveFailures {
 				msg := fmt.Sprintf("%s 查询连续失败 %d 次：%s", b.Provider, maxConsecutiveFailures, b.Err)
-				if err := e.fire("liquoten-cred 告警", msg); err != nil {
+				if err := e.fire("liquoten 告警", msg); err != nil {
 					firstErr = err
 				}
 			}
@@ -89,7 +89,7 @@ func (e *Engine) Check(balances []providers.Balance) error {
 			case sec.UsedPct >= th && !e.alerted[key]:
 				e.alerted[key] = true
 				msg := fmt.Sprintf("%s %s 已用 %.1f%%（阈值 %.0f%%）", b.Provider, sec.Name, sec.UsedPct, th)
-				if err := e.fire("liquoten-cred 告警", msg); err != nil {
+				if err := e.fire("liquoten 告警", msg); err != nil {
 					firstErr = err
 				}
 			case sec.UsedPct < th:
