@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lk/llmcred/internal/providers"
+	"github.com/lk/liquoten-cred/internal/providers"
 )
 
 // Name 是注册表里的 provider 名称。

@@ -1,9 +1,9 @@
-// llmcred-bar：SwiftBar 菜单栏插件。只读 daemon 写出的 state.json，无网络调用。
+// liquoten-cred-bar：SwiftBar 菜单栏插件。只读 daemon 写出的 state.json，无网络调用。
 //
 // 构建与安装：
 //
-//	go build -o ~/.local/bin/llmcred-bar ./swiftbar
-//	ln -s ~/.local/bin/llmcred-bar "$SWIFTBAR_PLUGIN_DIR/llmcred.10m.sh"
+//	go build -o ~/.local/bin/liquoten-cred-bar ./swiftbar
+//	ln -s ~/.local/bin/liquoten-cred-bar "$SWIFTBAR_PLUGIN_DIR/liquoten-cred.10m.sh"
 //
 // SwiftBar 每次刷新会执行一次本程序，按 xbar 格式输出菜单。
 package main
@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lk/llmcred/internal/config"
-	"github.com/lk/llmcred/internal/providers"
-	"github.com/lk/llmcred/internal/store"
+	"github.com/lk/liquoten-cred/internal/config"
+	"github.com/lk/liquoten-cred/internal/providers"
+	"github.com/lk/liquoten-cred/internal/store"
 )
 
 const bailianConsoleURL = "https://bailian.console.aliyun.com/"
@@ -27,10 +27,10 @@ func main() {
 	balances, err := st.ReadState()
 	if err != nil {
 		// daemon 未运行或尚未写入
-		fmt.Println("llmcred 未运行 | color=gray")
+		fmt.Println("liquoten-cred 未运行 | color=gray")
 		fmt.Println("---")
 		fmt.Println("daemon 尚未写入状态 | color=gray")
-		fmt.Println("安装: launchctl load ~/Library/LaunchAgents/com.llmcred.plist | color=gray")
+		fmt.Println("安装: launchctl load ~/Library/LaunchAgents/com.liquoten-cred.plist | color=gray")
 		return
 	}
 	render(cfg, balances)
@@ -86,7 +86,7 @@ func menuTitle(balances []providers.Balance) string {
 		titles = append(titles, displayName(b.Provider)+" "+strings.Join(short, " · "))
 	}
 	if len(titles) == 0 {
-		return "llmcred"
+		return "liquoten-cred"
 	}
 	return strings.Join(titles, " · ")
 }

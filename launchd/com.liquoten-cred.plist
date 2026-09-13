@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>Label</key>
-	<string>com.llmcred</string>
+	<string>com.liquoten-cred</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/lk/.local/bin/llmcred</string>
+		<string>/Users/lk/.local/bin/liquoten-cred</string>
 		<string>-config</string>
-		<string>/Users/lk/.config/llmcred/config.toml</string>
+		<string>/Users/lk/.config/liquoten-cred/config.toml</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
@@ -17,8 +17,8 @@
 	<key>ProcessType</key>
 	<string>Background</string>
 	<key>StandardOutPath</key>
-	<string>/Users/lk/Library/Logs/llmcred.log</string>
+	<string>/Users/lk/Library/Logs/liquoten-cred.log</string>
 	<key>StandardErrorPath</key>
-	<string>/Users/lk/Library/Logs/llmcred.log</string>
+	<string>/Users/lk/Library/Logs/liquoten-cred.log</string>
 </dict>
 </plist>

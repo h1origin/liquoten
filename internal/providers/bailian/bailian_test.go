@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lk/llmcred/internal/providers"
+	"github.com/lk/liquoten-cred/internal/providers"
 )
 
 func TestParseTokenPlanDirect(t *testing.T) {

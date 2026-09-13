@@ -1,4 +1,4 @@
-module github.com/lk/llmcred
+module github.com/lk/liquoten-cred
 
 go 1.27.1
 

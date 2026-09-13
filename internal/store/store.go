@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/lk/llmcred/internal/providers"
+	"github.com/lk/liquoten-cred/internal/providers"
 )
 
 // Store 封装缓存目录下的读写。
@@ -21,16 +21,16 @@ type Store struct{ dir string }
 // New 指定缓存目录。
 func New(dir string) *Store { return &Store{dir: dir} }
 
-// DefaultDir 返回默认缓存目录（可用 LLMCRED_CACHE_DIR 覆盖）。
+// DefaultDir 返回默认缓存目录（可用 LIQUOTEN_CRED_CACHE_DIR 覆盖）。
 func DefaultDir() string {
-	if d := os.Getenv("LLMCRED_CACHE_DIR"); d != "" {
+	if d := os.Getenv("LIQUOTEN_CRED_CACHE_DIR"); d != "" {
 		return d
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".llmcred"
+		return ".liquoten-cred"
 	}
-	return filepath.Join(home, ".cache", "llmcred")
+	return filepath.Join(home, ".cache", "liquoten-cred")
 }
 
 func (s *Store) ensureDir() error { return os.MkdirAll(s.dir, 0o755) }

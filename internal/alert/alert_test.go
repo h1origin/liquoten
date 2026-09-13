@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lk/llmcred/internal/providers"
+	"github.com/lk/liquoten-cred/internal/providers"
 )
 
 type recorder struct{ fired []string }
