@@ -36,8 +36,8 @@ go build -o ~/.local/bin/liquoten-cred ./cmd/liquoten-cred
 go build -o ~/.local/bin/liquoten-cred-bar ./swiftbar
 
 # 3. 配置（可选，默认配置即可跑）
-mkdir -p ~/.config/liquoten-cred
-cp config.example.toml ~/.config/liquoten-cred/config.toml
+mkdir -p ~/.config/liquoten
+cp config.example.toml ~/.config/liquoten/config.toml
 
 # 4. 先手动验证一次（详见下方"验证"）
 ~/.local/bin/liquoten-cred -once
@@ -77,7 +77,7 @@ ln -s ~/.local/bin/liquoten-cred-bar "$SWIFTBAR_PLUGIN_DIR/liquoten-cred.10m.sh"
 | 变量 | 作用 |
 |---|---|
 | `DASHSCOPE_API_KEY` | 百炼 API key（bailian-cli 读取，与 `bl auth login` 二选一） |
-| `LIQUOTEN_CRED_CONFIG` | 覆盖默认配置文件路径（`~/.config/liquoten-cred/config.toml`） |
+| `LIQUOTEN_CONFIG` | 覆盖默认配置文件路径（`~/.config/liquoten/config.toml`） |
 | `LIQUOTEN_CRED_CACHE_DIR` | 覆盖默认缓存目录（`~/.cache/liquoten-cred`） |
 
 daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。
@@ -141,7 +141,7 @@ docs/                  架构图（.excalidraw 可编辑源文件 + PNG 预览�
 launchctl bootout gui/$(id -u)/com.liquoten-cred    # 旧版 macOS: launchctl unload ~/Library/LaunchAgents/com.liquoten-cred.plist
 rm ~/Library/LaunchAgents/com.liquoten-cred.plist
 rm ~/.local/bin/liquoten-cred ~/.local/bin/liquoten-cred-bar
-rm -rf ~/.cache/liquoten-cred ~/.config/liquoten-cred     # 缓存与配置（含历史数据）
+rm -rf ~/.cache/liquoten-cred ~/.config/liquoten     # 缓存与配置（含历史数据）
 ```
 
 ## 设计与边界

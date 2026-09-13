@@ -20,7 +20,7 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", config.DefaultPath(), "配置文件路径（默认 ~/.config/liquoten-cred/config.toml）")
+	configPath := flag.String("config", config.DefaultPath(), "配置文件路径（默认 ~/.config/liquoten/config.toml）")
 	once := flag.Bool("once", false, "只轮询一次后退出（调试用）")
 	cacheDir := flag.String("cache-dir", store.DefaultDir(), "缓存目录（默认 ~/.cache/liquoten-cred）")
 	flag.Parse()

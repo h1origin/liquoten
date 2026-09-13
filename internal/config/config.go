@@ -1,4 +1,4 @@
-// Package config 负责加载 ~/.config/liquoten-cred/config.toml 与默认值合并。
+// Package config 负责加载 ~/.config/liquoten/config.toml 与默认值合并。
 package config
 
 import (
@@ -99,14 +99,14 @@ func Load(path string) (Config, error) {
 
 // DefaultPath 返回默认配置文件路径（可用环境变量覆盖，方便测试与多机部署）。
 func DefaultPath() string {
-	if p := os.Getenv("LIQUOTEN_CRED_CONFIG"); p != "" {
+	if p := os.Getenv("LIQUOTEN_CONFIG"); p != "" {
 		return p
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "config.toml"
 	}
-	return home + "/.config/liquoten-cred/config.toml"
+	return home + "/.config/liquoten/config.toml"
 }
 
 func boolPtr(b bool) *bool { return &b }
