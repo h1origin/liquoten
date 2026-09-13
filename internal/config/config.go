@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	// DefaultPollInterval 是 daemon 默认轮询间隔（实际带 ±10% 抖动，约 9–11 分钟）。
-	DefaultPollInterval = 10 * time.Minute
+	// DefaultPollInterval 是 daemon 默认轮询间隔（实际带 ±10% 抖动，约 13.5–16.5 分钟）。
+	DefaultPollInterval = 15 * time.Minute
 	// DefaultTimeout 是单次 provider 查询的默认超时。
 	DefaultTimeout = 45 * time.Second
 )
@@ -30,14 +30,17 @@ func (c ProviderCfg) IsEnabled() bool { return c.Enabled == nil || *c.Enabled }
 // Config 是完整的运行配置。
 type Config struct {
 	PollInterval time.Duration                 `toml:"poll_interval"`
+	Notify       string                        `toml:"notify"` // "app"（默认）或 "osascript"
 	Providers    map[string]ProviderCfg        `toml:"providers"`
 	Thresholds   map[string]map[string]float64 `toml:"thresholds"`
 }
 
-// Default 返回内置默认配置：百炼启用，5 小时窗口 80%、周窗口 90% 告警。
+// Default 返回内置默认配置：百炼启用，5 小时窗口 80%、周窗口 90% 告警，
+// 通知写入 notifications.jsonl 由 Liquoten.app 投递。
 func Default() Config {
 	return Config{
 		PollInterval: DefaultPollInterval,
+		Notify:       "app",
 		Providers: map[string]ProviderCfg{
 			"bailian": {Enabled: boolPtr(true)},
 		},
@@ -69,6 +72,9 @@ func Load(path string) (Config, error) {
 
 	if user.PollInterval > 0 {
 		cfg.PollInterval = user.PollInterval
+	}
+	if user.Notify != "" {
+		cfg.Notify = user.Notify
 	}
 	for name, u := range user.Providers {
 		base, ok := cfg.Providers[name]

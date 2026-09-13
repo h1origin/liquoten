@@ -2,7 +2,7 @@
 //   - state.json：原子写入的最新快照，SwiftBar 插件只读这个文件
 //   - history.jsonl：每次轮询追加一行，为后续趋势分析/看板留数据
 //
-// v1 用 JSONL 而非 SQLite：历史数据规模小（10 分钟一次、一天 144 行），
+// v1 用 JSONL 而非 SQLite：历史数据规模小（15 分钟一次、一天 96 行），
 // 追加式 JSONL 零依赖、可直接 tail/流式读取；v3 做看板时再评估迁移。
 package store
 

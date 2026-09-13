@@ -3,7 +3,7 @@
 // 构建与安装：
 //
 //	go build -o ~/.local/bin/liquoten-bar ./swiftbar
-//	ln -s ~/.local/bin/liquoten-bar "$SWIFTBAR_PLUGIN_DIR/liquoten.10m.sh"
+//	ln -s ~/.local/bin/liquoten-bar "$SWIFTBAR_PLUGIN_DIR/liquoten.15m.sh"
 //
 // SwiftBar 每次刷新会执行一次本程序，按 xbar 格式输出菜单。
 package main

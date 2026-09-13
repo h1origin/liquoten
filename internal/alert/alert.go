@@ -1,7 +1,8 @@
 // Package alert 实现阈值告警：
-//   - 额度百分比升穿阈值时发一次 macOS 通知（回到阈值以下后允许再次告警）
+//   - 额度百分比升穿阈值时发一次通知（回到阈值以下后允许再次告警）
 //   - 查询连续失败 3 次告警一次，成功即复位
 //   - 已告警状态落盘，daemon 重启后不会立即重复轰炸
+//   - 通知默认写入 notifications.jsonl，由 Liquoten.app 投递系统通知
 package alert
 
 import (
@@ -12,14 +13,15 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lk/liquoten-cred/internal/providers"
 )
 
-// Notifier 发出系统通知。默认实现走 osascript display notification。
+// Notifier 发出系统通知。默认通道是 FileNotifier（App 投递）；OSAScriptNotifier 是无 App 时的回退方案。
 type Notifier func(title, message string) error
 
-// OSAScriptNotifier 是 macOS 上的默认通知实现。
+// OSAScriptNotifier 是 macOS 上的通知实现（无 App 时的回退方案）。
 func OSAScriptNotifier(title, message string) error {
 	script := fmt.Sprintf(`display notification "%s" with title "%s"`, escape(message), escape(title))
 	return exec.Command("osascript", "-e", script).Run()
@@ -28,6 +30,44 @@ func OSAScriptNotifier(title, message string) error {
 // escape 转义 AppleScript 字符串里的反斜杠与双引号。
 func escape(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s)
+}
+
+// Event 是写给 Liquoten.app 的通知事件（notifications.jsonl 的一行）。
+type Event struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Body  string `json:"body"`
+	At    int64  `json:"at"` // unix 毫秒
+}
+
+// FileNotifier 把告警事件追加写入 cacheDir/notifications.jsonl，由 App 读取并
+// 通过 UNUserNotificationCenter 投递。事件只追加不删除，App 用 id 游标去重。
+func FileNotifier(cacheDir string) (Notifier, error) {
+	path := filepath.Join(cacheDir, "notifications.jsonl")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return nil, err
+	}
+	var (
+		mu  sync.Mutex
+		seq int
+	)
+	return func(title, message string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		id := fmt.Sprintf("%d-%d", time.Now().UnixMilli(), seq)
+		seq++
+		line, err := json.Marshal(Event{ID: id, Title: title, Body: message, At: time.Now().UnixMilli()})
+		if err != nil {
+			return err
+		}
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = f.Write(append(line, '\n'))
+		return err
+	}, nil
 }
 
 // Engine 是告警状态机。

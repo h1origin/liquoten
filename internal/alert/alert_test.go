@@ -1,6 +1,10 @@
 package alert
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,5 +123,69 @@ func TestNilNotifierSilent(t *testing.T) {
 	}
 	if err := e.Check([]providers.Balance{bal}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFileNotifierAppendsEvents(t *testing.T) {
+	dir := t.TempDir()
+	n, err := FileNotifier(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := n("liquoten 告警", "第一条"); err != nil {
+		t.Fatal(err)
+	}
+	if err := n("liquoten 告警", "第二条"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "notifications.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("lines = %d, want 2", len(lines))
+	}
+	var evs []Event
+	for _, line := range lines {
+		var ev Event
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("非法 JSON 行 %q: %v", line, err)
+		}
+		evs = append(evs, ev)
+	}
+	if evs[0].Body != "第一条" || evs[1].Body != "第二条" {
+		t.Fatalf("bodies = %v", evs)
+	}
+	if evs[0].ID == evs[1].ID {
+		t.Fatalf("事件 id 重复: %s", evs[0].ID)
+	}
+}
+
+func TestFileNotifierThroughEngine(t *testing.T) {
+	dir := t.TempDir()
+	n, err := FileNotifier(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := New(map[string]map[string]float64{"bailian": {"5-hour quota": 80}}, dir, n)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bal := providers.Balance{
+		Provider:  "bailian",
+		FetchedAt: time.Now(),
+		Sections:  []providers.Section{{Name: "5-hour quota", UsedPct: 85}},
+	}
+	if err := e.Check([]providers.Balance{bal}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "notifications.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "已用 85.0%") {
+		t.Fatalf("事件内容不符: %s", data)
 	}
 }

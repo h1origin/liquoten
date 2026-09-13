@@ -31,7 +31,21 @@ func main() {
 	}
 
 	st := store.New(*cacheDir)
-	engine, err := alert.New(cfg.Thresholds, *cacheDir, alert.OSAScriptNotifier)
+
+	// 通知通道：默认 "app" 把告警事件写进 notifications.jsonl，由 Liquoten.app 投递系统通知；
+	// 设 notify = "osascript" 则退回 daemon 自己发 macOS 通知。
+	var notifier alert.Notifier
+	switch cfg.Notify {
+	case "osascript":
+		notifier = alert.OSAScriptNotifier
+	default:
+		notifier, err = alert.FileNotifier(*cacheDir)
+		if err != nil {
+			log.Fatalf("初始化通知通道失败: %v", err)
+		}
+	}
+
+	engine, err := alert.New(cfg.Thresholds, *cacheDir, notifier)
 	if err != nil {
 		log.Fatalf("初始化告警引擎失败: %v", err)
 	}
