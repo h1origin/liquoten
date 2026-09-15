@@ -44,6 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildUI() {
         guard let button = statusItem.button else { return }
         button.title = Self.summaryTitle(balances, daemonMissing: daemon.isMissing)
+        button.image = Self.ringsImage(balances)
+        button.imagePosition = button.image == nil ? .noImage : .imageLeft
 
         let menu = NSMenu()
         buildContent(in: menu)
@@ -160,6 +162,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
         item.isEnabled = false
         return item
+    }
+
+    // MARK: - 环形图标
+
+    // 每个有百分比语义的 section 一个环形图标，横向排列（最多 4 个）。
+    static func ringsImage(_ balances: [BalanceState]) -> NSImage? {
+        let ringSize: CGFloat = 13, gap: CGFloat = 3
+        var rings: [(Double, NSColor)] = []
+        for b in balances where b.error == nil {
+            for s in b.sections where s.usedPct >= 0 {
+                rings.append((s.usedPct, ringColor(s.usedPct)))
+            }
+        }
+        guard !rings.isEmpty else { return nil }
+        if rings.count > 4 { rings = Array(rings.prefix(4)) }
+        let width = CGFloat(rings.count) * ringSize + CGFloat(rings.count - 1) * gap
+        return NSImage(size: NSSize(width: width, height: ringSize), flipped: false) { rect in
+            for (i, r) in rings.enumerated() {
+                let x = CGFloat(i) * (ringSize + gap)
+                drawRing(percent: r.0, color: r.1, in: NSRect(x: x, y: 0, width: ringSize, height: ringSize))
+            }
+            return true
+        }
+    }
+
+    static func ringColor(_ usedPct: Double) -> NSColor {
+        switch usedPct {
+        case 90...: return .systemRed
+        case 70..<90: return .systemOrange
+        default: return .systemBlue
+        }
+    }
+
+    static func drawRing(percent: Double, color: NSColor, in rect: NSRect) {
+        let lineWidth: CGFloat = 1.5
+        let circleRect = rect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+        NSColor.labelColor.withAlphaComponent(0.55).setStroke()
+        let outline = NSBezierPath(ovalIn: circleRect)
+        outline.lineWidth = lineWidth
+        outline.stroke()
+
+        let p = min(max(percent, 0), 100) / 100
+        guard p > 0 else { return }
+        let center = NSPoint(x: rect.midX, y: rect.midY)
+        let radius = circleRect.width / 2
+        let pie = NSBezierPath()
+        pie.move(to: center)
+        pie.appendArc(withCenter: center, radius: radius, startAngle: 90, endAngle: 90 - 360 * p, clockwise: true)
+        pie.close()
+        color.setFill()
+        pie.fill()
     }
 
     // MARK: - 动作
