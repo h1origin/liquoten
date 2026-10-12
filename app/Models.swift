@@ -13,6 +13,19 @@ struct BalanceState: Decodable {
     let sections: [SectionState]
     let fetchedAt: Date?
     let error: String?
+
+    // 查询失败时 daemon 写出 "sections": null，按空数组处理，避免整份 state 解码失败。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try c.decode(String.self, forKey: .provider)
+        sections = try c.decodeIfPresent([SectionState].self, forKey: .sections) ?? []
+        fetchedAt = try c.decodeIfPresent(Date.self, forKey: .fetchedAt)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case provider, sections, fetchedAt, error
+    }
 }
 
 // notifications.jsonl 里的一行（alert.FileNotifier 写入）。
