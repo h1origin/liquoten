@@ -53,11 +53,15 @@ final class DaemonManager {
             p.standardError = fh
         }
 
-        p.terminationHandler = { [weak self] _ in
+        // 只对当前托管的进程自动重启；restart() 主动结束的旧进程不再触发重启。
+        p.terminationHandler = { [weak self] exited in
             DispatchQueue.main.async {
-                guard let self, !self.quitting else { return }
+                guard let self, !self.quitting, self.process === exited else { return }
                 self.process = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.spawn() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    guard !self.quitting, self.process == nil else { return }
+                    self.spawn()
+                }
             }
         }
         do {
