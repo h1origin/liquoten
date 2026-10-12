@@ -11,7 +11,7 @@ ARCH="$(uname -m)"
 echo "==> 清理旧产物"
 rm -rf "$APP"
 
-echo "==> 编译 Swift App（$ARCH）"
+echo "==> 编译 Swift App（${ARCH}）"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -target "$ARCH-apple-macos13.0" \
   -o "$APP/Contents/MacOS/$APP_NAME" \

@@ -51,9 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildContent(in: menu)
         menu.addItem(.separator())
 
-        let console = NSMenuItem(title: "打开百炼控制台", action: #selector(openConsole), keyEquivalent: "")
-        console.target = self
-        menu.addItem(console)
+        for (provider, title, _) in Self.consoles where balances.contains(where: { $0.provider == provider }) {
+            let console = NSMenuItem(title: title, action: #selector(openConsole(_:)), keyEquivalent: "")
+            console.target = self
+            console.representedObject = provider
+            menu.addItem(console)
+        }
 
         let cache = NSMenuItem(title: "打开数据目录", action: #selector(openCacheDir), keyEquivalent: "")
         cache.target = self
@@ -87,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         for b in balances {
             if let err = b.error, !err.isEmpty {
-                menu.addItem(Self.disabled("\(b.provider): \(err)"))
+                menu.addItem(Self.disabled("\(Self.displayName(b.provider)): \(err)"))
                 continue
             }
             for s in b.sections {
@@ -107,18 +110,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var parts: [String] = []
         for b in balances {
             if let err = b.error, !err.isEmpty {
-                parts.append("\(b.provider) 出错")
+                parts.append("\(displayName(b.provider)) 出错")
                 continue
             }
-            for s in b.sections {
-                let prefix = balances.count > 1 ? "\(b.provider) " : ""
-                parts.append("\(prefix)\(shortName(s.name)) \(Int(s.usedPct.rounded()))%")
+            let sections = b.sections.map { "\(shortName($0.name)) \(Int($0.usedPct.rounded()))%" }
+            if sections.isEmpty { continue }
+            if balances.count > 1 {
+                parts.append("\(displayName(b.provider)) " + sections.joined(separator: " "))
+            } else {
+                parts.append(contentsOf: sections)
             }
         }
         if parts.isEmpty { return "liquoten" }
         let title = parts.joined(separator: " · ")
-        return title.count > 36 ? String(title.prefix(33)) + "…" : title
+        return title.count > 48 ? String(title.prefix(45)) + "…" : title
     }
+
+    static func displayName(_ provider: String) -> String {
+        switch provider {
+        case "bailian": return "百炼"
+        case "claudecode": return "Claude"
+        default: return provider
+        }
+    }
+
+    static let consoles: [(provider: String, title: String, url: String)] = [
+        ("bailian", "打开百炼控制台", "https://bailian.console.aliyun.com/"),
+        ("claudecode", "打开 Claude 用量页", "https://claude.ai/settings/usage"),
+    ]
 
     static func shortName(_ name: String) -> String {
         switch name {
@@ -129,9 +148,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     static func sectionLine(provider: String, _ s: SectionState) -> String {
-        var line = "\(provider) · \(s.name): \(fmtPct(s.usedPct))%"
+        var line = "\(displayName(provider)) · \(s.name): \(fmtPct(s.usedPct))%"
         if s.usedPct < 0 {
-            line = "\(provider) · \(s.name): 无限制"
+            line = "\(displayName(provider)) · \(s.name): 无限制"
         }
         if let reset = s.resetAt, reset > Date() {
             line += "（\(countdown(to: reset)) 后重置）"
@@ -217,10 +236,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - 动作
 
-    @objc private func openConsole() {
-        if let url = URL(string: "https://bailian.console.aliyun.com/") {
-            NSWorkspace.shared.open(url)
-        }
+    @objc private func openConsole(_ sender: NSMenuItem) {
+        guard let provider = sender.representedObject as? String,
+              let entry = Self.consoles.first(where: { $0.provider == provider }),
+              let url = URL(string: entry.url) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func openCacheDir() {

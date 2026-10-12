@@ -1,13 +1,18 @@
 // liquoten daemon：定时轮询各 provider 的额度，写缓存、记历史、发告警。
-// 由 launchd 常驻运行；SwiftBar 插件只读它写出的 state.json。
+// 由 Liquoten.app 或 launchd 常驻运行；菜单栏只读它写出的 state.json。
+//
+// `liquoten statusline` 子命令作为 Claude Code 的 statusLine 命令运行，
+// 把订阅用量落盘供 claudecode provider 读取。
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -16,10 +21,16 @@ import (
 	"github.com/lk/liquoten-cred/internal/config"
 	"github.com/lk/liquoten-cred/internal/providers"
 	_ "github.com/lk/liquoten-cred/internal/providers/bailian" // 注册 provider
+	"github.com/lk/liquoten-cred/internal/providers/claudecode"
 	"github.com/lk/liquoten-cred/internal/store"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "statusline" {
+		statusline()
+		return
+	}
+
 	configPath := flag.String("config", config.DefaultPath(), "配置文件路径（默认 ~/.config/liquoten/config.toml）")
 	once := flag.Bool("once", false, "只轮询一次后退出（调试用）")
 	cacheDir := flag.String("cache-dir", store.DefaultDir(), "缓存目录（默认 ~/.cache/liquoten）")
@@ -50,7 +61,7 @@ func main() {
 		log.Fatalf("初始化告警引擎失败: %v", err)
 	}
 
-	provs := buildProviders(cfg)
+	provs := buildProviders(cfg, *cacheDir)
 	if len(provs) == 0 {
 		log.Fatal("没有启用的 provider，请检查配置文件")
 	}
@@ -98,7 +109,21 @@ func main() {
 	}
 }
 
-func buildProviders(cfg config.Config) []providers.Provider {
+// statusline 读 Claude Code 传入的 stdin JSON，落盘用量并打印状态栏文本。
+// 落盘失败不影响状态栏显示。
+func statusline() {
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return
+	}
+	in, err := claudecode.Capture(raw, store.DefaultDir(), time.Now())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "liquoten statusline: %v\n", err)
+	}
+	fmt.Println(claudecode.StatusLine(in))
+}
+
+func buildProviders(cfg config.Config, dataDir string) []providers.Provider {
 	names := make([]string, 0, len(cfg.Providers))
 	for name := range cfg.Providers {
 		names = append(names, name)
@@ -115,6 +140,7 @@ func buildProviders(cfg config.Config) []providers.Provider {
 			APIKey:  pc.APIKey,
 			Command: pc.Command,
 			Timeout: pc.Timeout,
+			DataDir: dataDir,
 		})
 		if err != nil {
 			log.Printf("跳过 provider %q: %v", name, err)

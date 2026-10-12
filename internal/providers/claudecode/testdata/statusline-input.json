@@ -1,0 +1,25 @@
+{
+  "hook_event_name": "Status",
+  "session_id": "abc123",
+  "model": {
+    "id": "claude-opus-5-5",
+    "display_name": "Opus 5.5"
+  },
+  "workspace": {
+    "current_dir": "/Users/lk/code/liquoten",
+    "project_dir": "/Users/lk/code/liquoten"
+  },
+  "context_window": {
+    "used_percentage": 8
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 23.5,
+      "resets_at": 1738425600
+    },
+    "seven_day": {
+      "used_percentage": 41.2,
+      "resets_at": 1738857600
+    }
+  }
+}

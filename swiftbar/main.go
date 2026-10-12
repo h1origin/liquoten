@@ -18,7 +18,10 @@ import (
 	"github.com/lk/liquoten-cred/internal/store"
 )
 
-const bailianConsoleURL = "https://bailian.console.aliyun.com/"
+const (
+	bailianConsoleURL = "https://bailian.console.aliyun.com/"
+	claudeUsageURL    = "https://claude.ai/settings/usage"
+)
 
 func main() {
 	cfg, _ := config.Load(config.DefaultPath())
@@ -65,6 +68,9 @@ func render(cfg config.Config, balances []providers.Balance) {
 	if hasProvider(balances, "bailian") {
 		fmt.Printf("打开百炼控制台 | href=%s\n", bailianConsoleURL)
 	}
+	if hasProvider(balances, "claudecode") {
+		fmt.Printf("打开 Claude 用量页 | href=%s\n", claudeUsageURL)
+	}
 	fmt.Println("刷新 | refresh=true")
 }
 
@@ -96,6 +102,8 @@ func displayName(provider string) string {
 	switch provider {
 	case "bailian":
 		return "百炼"
+	case "claudecode":
+		return "Claude"
 	default:
 		return provider
 	}

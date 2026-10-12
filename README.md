@@ -6,7 +6,7 @@ macOS 菜单栏实时显示 LLM 额度/余额的轻量监控工具。只读轮�
 
 > 架构图为可编辑的 Excalidraw 源文件：[docs/liquoten-architecture.excalidraw](docs/liquoten-architecture.excalidraw)（拖入 excalidraw.com 或 VS Code 插件编辑）
 
-- **当前支持**：阿里云百炼 Token Plan（5 小时 / 1 周滚动配额百分比 + 重置倒计时）
+- **当前支持**：阿里云百炼 Token Plan、Claude Code 订阅（Pro/Max），均为 5 小时 / 1 周滚动配额百分比 + 重置倒计时
 - **形态**：原生 Swift 菜单栏 App（Liquoten.app）+ Go daemon；阈值升穿发 macOS 系统通知
 - **通用性**：新增 provider = 实现 `providers.Provider` 接口 + 一行注册，展示层无需改动
 
@@ -54,13 +54,30 @@ open /Applications/Liquoten.app
 command = "/opt/homebrew/bin/bl"   # 用 `which bl` 查到实际路径
 ```
 
+## Claude Code 订阅用量
+
+Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used_percentage`、`resets_at`）通过 stdin 传给 [statusLine](https://code.claude.com/docs/en/statusline) 命令。`liquoten statusline` 子命令把它落盘到 `~/.cache/liquoten/claudecode.json`，同时在 Claude Code 底部打印 `[Opus 5.5] 5h 23% · 周 41%`；daemon 的 `claudecode` provider 只读这个文件，不碰 OAuth 凭证、不调未公开接口。
+
+1. `~/.claude/settings.json` 加：
+
+   ```json
+   "statusLine": {
+     "type": "command",
+     "command": "/Applications/Liquoten.app/Contents/Resources/liquoten statusline"
+   }
+   ```
+
+2. `~/.config/liquoten/config.toml` 加 `[providers.claudecode]`（阈值见 config.example.toml）
+
+边界：数据只在使用 Claude Code 时更新（会话首次响应后才有）；订阅额度与 claude.ai 网页端共享，只在网页端用时菜单栏会滞后，下次打开 Claude Code 即对齐。窗口过了 `resets_at` 显示 0%。"上次更新"取 statusline 落盘时间。
+
 ## 菜单栏
 
 标题形如 `百炼 5h 37% · 周 12%`（多 provider 用 `·` 连接），有 provider 查询失败时显示 `百炼 出错`。标题左侧有环形进度图标：每个有百分比语义的 section 一个（最多 4 个），从 12 点方向顺时针填充已用比例，颜色按用量分档——<70% 蓝、70–90% 橙、≥90% 红。下拉菜单包含：
 
 - 各窗口百分比与重置倒计时（`（3h20m 后重置）`）
 - 上次更新时间
-- 打开百炼控制台、打开数据目录、立即刷新（重启 daemon，立刻轮询一次）
+- 打开百炼控制台 / Claude 用量页、打开数据目录、立即刷新（重启 daemon，立刻轮询一次）
 - 开机自动启动开关、退出
 
 daemon 缺失或尚未轮询时显示 `liquoten` 与对应提示。
@@ -107,12 +124,13 @@ cat ~/.cache/liquoten/state.json                            # 与控制台百分
 | Provider | 查询接口 | 语义 |
 |---|---|---|
 | 百炼 Token Plan | 官方 CLI `bl usage token-plan --output json` | 5h/周窗口已用百分比 |
+| Claude Code 订阅 | statusLine stdin 的 `rate_limits`（`liquoten statusline` 落盘） | 5h/周窗口已用百分比 |
 | OpenAI / Codex | `GET api.openai.com/v1/dashboard/billing/subscription` | hard/soft limit USD；ChatGPT 订阅套餐无接口 |
-| Anthropic / Claude Code | `GET api.anthropic.com/v1/organizations/cost_calendar` | 本月累计费用 |
+| Anthropic API（按量） | Admin API `GET /v1/organizations/cost_report` | 本月累计费用 |
 | DeepSeek | `GET api.deepseek.com/user/balance` | 剩余 CNY |
 | OpenRouter | `GET openrouter.ai/api/v1/credits` | 剩余 credits |
 
-（表内非百炼接口为设计期核对的接入点，实现时需用真实 key 再验证。）
+（表内百炼、Claude Code 以外的接口为设计期核对的接入点，实现时需用真实 key 再验证。）
 
 ## 项目结构
 
@@ -123,6 +141,7 @@ cmd/liquoten/           daemon 入口（轮询循环、由 App 或 launchd 常�
 internal/config/       配置加载（TOML + 环境变量）
 internal/providers/    Provider 接口 + 注册表
   bailian/             百炼 adapter（exec bailian-cli + fixture 单测）
+  claudecode/          Claude Code adapter（statusline 落盘 + 读快照）
 internal/store/        state.json 原子写 + history.jsonl 追加
 internal/alert/        阈值状态机 + 通知通道（FileNotifier / osascript）
 swiftbar/              菜单栏插件（xbar 协议输出，legacy 路线）
