@@ -155,6 +155,14 @@ enum Style {
         """
     }
 
+    static func historyLabel(_ section: String) -> String {
+        switch section {
+        case "1-week quota": return "近 7 天"
+        case "1-month quota": return "近 30 天"
+        default: return "近 24 小时"
+        }
+    }
+
     static func historyWindow(_ section: String) -> TimeInterval {
         switch section {
         case "1-week quota": return 7 * 86400
@@ -281,12 +289,20 @@ struct SectionCard: View {
                     Text("%").font(.callout).foregroundStyle(.secondary)
                     Text("已用").font(.caption).foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 4)
-                if let reset = section.resetAt, reset > now {
-                    Chip(text: Style.resetChip(reset, now: now)).fixedSize()
-                }
             }
+            .lineLimit(1)
+            .fixedSize()
             if !unlimited {
+                HStack(spacing: 4) {
+                    Text(Style.historyLabel(section.name))
+                    Spacer(minLength: 4)
+                    if let reset = section.resetAt, reset > now {
+                        Text(Style.resetChip(reset, now: now) + " 重置")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
                 Sparkline(points: points, window: Style.historyWindow(section.name), now: now, color: tint)
                     .frame(height: 30)
                 UsageBar(pct: section.usedPct, color: tint)
