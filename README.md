@@ -30,9 +30,9 @@ daemon 由 App 作为子进程拉起（意外退出 5 秒后自动重启）；Ap
 ```bash
 # 1. 安装官方百炼 CLI（liquoten 的百炼 adapter 通过它查询）
 npm install -g bailian-cli
-bl auth login --api-key sk-你的key        # 或 export DASHSCOPE_API_KEY=sk-xxx 写入 ~/.zshrc
+bl auth login --console                  # 浏览器登录控制台（国际站加 --console-site international）；也可装好 App 后在菜单里点"登录百炼"
 
-# 2. 配置（可选，默认配置即可跑；api_key 也可以直接写在这里，见下方"配置"）
+# 2. 配置（可选，默认配置即可跑，见下方"配置"）
 mkdir -p ~/.config/liquoten
 cp config.example.toml ~/.config/liquoten/config.toml
 
@@ -77,6 +77,7 @@ Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used
 
 - 各窗口百分比与重置倒计时（`（3h20m 后重置）`）
 - 上次更新时间
+- 登录百炼（国内站 / 国际站）：调用 `bl auth login --console` 打开浏览器登录，成功后自动重启 daemon 刷新
 - 打开百炼控制台 / Claude 用量页、打开数据目录、立即刷新（重启 daemon，立刻轮询一次）
 - 开机自动启动开关、退出
 
@@ -90,17 +91,17 @@ daemon 缺失或尚未轮询时显示 `liquoten` 与对应提示。
 
 ## 配置
 
-见 [config.example.toml](config.example.toml)。默认阈值：5 小时窗口 80%、周窗口 90%，升穿时发一次系统通知，回落后复位（下次升穿再告警）。`api_key` 可写进配置文件（优先级最高），留空则走 `DASHSCOPE_API_KEY` 或 `bl auth login` 的登录态。
+见 [config.example.toml](config.example.toml)。默认阈值：5 小时窗口 80%、周窗口 90%，升穿时发一次系统通知，回落后复位（下次升穿再告警）。百炼 Token Plan 用量查询依赖 `bl auth login --console` 的控制台登录态（API key 只用于模型调用，查不到用量）；`api_key` 字段仍会以 `DASHSCOPE_API_KEY` 传给 bl。
 
 环境变量：
 
 | 变量 | 作用 |
 |---|---|
-| `DASHSCOPE_API_KEY` | 百炼 API key（bailian-cli 读取，与 `bl auth login` 二选一） |
+| `DASHSCOPE_API_KEY` | 百炼 API key（bailian-cli 读取；用量查询仍需控制台登录） |
 | `LIQUOTEN_CONFIG` | 覆盖默认配置文件路径（`~/.config/liquoten/config.toml`） |
 | `LIQUOTEN_CACHE_DIR` | 覆盖默认缓存目录（`~/.cache/liquoten`） |
 
-daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。
+daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。子命令 `liquoten login [-site domestic|international] bailian` 执行控制台登录（菜单"登录百炼"即调用它）。
 
 ## 验证
 
@@ -155,6 +156,7 @@ docs/                  架构图（.excalidraw 可编辑源文件 + PNG 预览�
 |---|---|
 | 菜单栏显示 `liquoten ✕` | daemon 二进制缺失，App bundle 不完整，重新 `./app/build.sh` |
 | 菜单栏一直 `liquoten` | 等首次轮询（启动即轮询）；仍不行看日志 `tail ~/Library/Logs/liquoten.log` |
+| 百炼报 `No console access token found` | 菜单里点"登录百炼"选国内站/国际站，或终端执行 `bl auth login --console` |
 | `bl: command not found` | `npm install -g bailian-cli`（Node ≥ 22.12）；或在配置里 `command = "/绝对路径/bl"` |
 | 超阈值但不弹通知 | 系统设置 → 通知里允许 Liquoten；勿扰模式会吞掉通知；`notify` 配置是否被改成了别的值 |
 | 百分比与控制台不一致 | 有最多一个轮询间隔的延迟；菜单里"立即刷新"后对比 |
