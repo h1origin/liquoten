@@ -348,11 +348,11 @@ struct SectionCard: View {
         case "5-hour quota":
             MinuteLine(points: points, start: window.start, end: window.end, now: now,
                        current: section.usedPct, color: tint)
-                .frame(height: 46)
+                .frame(height: 76)
         case "1-week quota":
             DayBars(points: points, start: window.start, days: 7, now: now, current: section.usedPct,
                     color: tint, compact: false)
-                .frame(height: 46)
+                .frame(height: 76)
         case "1-month quota":
             DayBars(points: points, start: window.start,
                     days: max(1, Int((window.end.timeIntervalSince(window.start) / 86400).rounded())),
@@ -689,13 +689,12 @@ struct MinuteLine: View {
 
     var body: some View {
         GeometryReader { geo in
+            let gutter: CGFloat = 24
             let w = geo.size.width, h = geo.size.height
             let span = max(end.timeIntervalSince(start), 60)
             let inWindow = points.filter { $0.time > start && $0.time <= now }
-            let peak = max(current, inWindow.map(\.usedPct).max() ?? 0)
-            let top = peak >= 80 ? 100 : max(20, (peak * 1.2 / 20).rounded(.up) * 20)
-            let x = { (t: Date) -> CGFloat in w * CGFloat(min(max(t.timeIntervalSince(start) / span, 0), 1)) }
-            let y = { (v: Double) -> CGFloat in h - 1 - (h - 2) * CGFloat(min(max(v, 0), top) / top) }
+            let x = { (t: Date) -> CGFloat in gutter + (w - gutter) * CGFloat(min(max(t.timeIntervalSince(start) / span, 0), 1)) }
+            let y = { (v: Double) -> CGFloat in h - 1 - (h - 6) * CGFloat(min(max(v, 0), 100) / 100) }
             let steps: [CGPoint] = {
                 var out = [CGPoint(x: x(start), y: y(0))]
                 var last = 0.0
@@ -712,10 +711,23 @@ struct MinuteLine: View {
                 ForEach(1..<Int(span / 3600) + 1, id: \.self) { k in
                     let tx = x(start.addingTimeInterval(Double(k) * 3600))
                     Path { p in
-                        p.move(to: CGPoint(x: tx, y: 0))
-                        p.addLine(to: CGPoint(x: tx, y: h))
+                        p.move(to: CGPoint(x: tx, y: y(100)))
+                        p.addLine(to: CGPoint(x: tx, y: y(0)))
                     }
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                }
+                ForEach([20, 40, 60, 80, 100], id: \.self) { v in
+                    Path { p in
+                        p.move(to: CGPoint(x: gutter, y: y(Double(v))))
+                        p.addLine(to: CGPoint(x: w, y: y(Double(v))))
+                    }
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                    Text("\(v)%")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                        .frame(width: gutter - 4, alignment: .trailing)
+                        .position(x: (gutter - 4) / 2, y: y(Double(v)))
                 }
                 Path { p in
                     p.move(to: CGPoint(x: x(now), y: y(0)))
@@ -736,7 +748,6 @@ struct MinuteLine: View {
                 .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
                 Circle().fill(color).frame(width: 5, height: 5)
                     .position(x: x(now), y: y(current))
-                Text("\(Int(top))%").font(.system(size: 8)).foregroundStyle(.tertiary)
             }
         }
     }
