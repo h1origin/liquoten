@@ -30,6 +30,13 @@ func main() {
 		statusline()
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "login" {
+		if err := login(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	configPath := flag.String("config", config.DefaultPath(), "配置文件路径（默认 ~/.config/liquoten/config.toml）")
 	once := flag.Bool("once", false, "只轮询一次后退出（调试用）")
@@ -121,6 +128,32 @@ func statusline() {
 		fmt.Fprintf(os.Stderr, "liquoten statusline: %v\n", err)
 	}
 	fmt.Println(claudecode.StatusLine(in))
+}
+
+func login(args []string) error {
+	fs := flag.NewFlagSet("login", flag.ExitOnError)
+	configPath := fs.String("config", config.DefaultPath(), "配置文件路径")
+	site := fs.String("site", "domestic", "站点：domestic 或 international")
+	fs.Parse(args)
+	name := fs.Arg(0)
+	if name == "" {
+		return fmt.Errorf("用法: liquoten login [-config 路径] [-site domestic|international] <provider>")
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return fmt.Errorf("加载配置失败 %s: %w", *configPath, err)
+	}
+	pc := cfg.Providers[name]
+	p, err := providers.New(name, providers.Options{APIKey: pc.APIKey, Command: pc.Command})
+	if err != nil {
+		return err
+	}
+	a, ok := p.(providers.Authenticator)
+	if !ok {
+		return fmt.Errorf("provider %q 不支持登录", name)
+	}
+	return a.Login(context.Background(), *site)
 }
 
 func buildProviders(cfg config.Config, dataDir string) []providers.Provider {

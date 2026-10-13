@@ -35,6 +35,10 @@ type Provider interface {
 	Query(ctx context.Context) (Balance, error)
 }
 
+type Authenticator interface {
+	Login(ctx context.Context, site string) error
+}
+
 // Options 由 config 层填充后传给各 provider 的工厂函数。
 type Options struct {
 	APIKey  string        // 可选；留空则依赖环境变量或 CLI 自身的登录态

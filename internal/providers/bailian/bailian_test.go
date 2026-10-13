@@ -108,6 +108,19 @@ func TestQueryFailsWhenCLIMissing(t *testing.T) {
 	}
 }
 
+func TestLoginWithFakeCLI(t *testing.T) {
+	p := New(providers.Options{Command: filepath.Join("testdata", "fake-bl.sh")})
+	for _, site := range []string{"domestic", "international"} {
+		if err := p.Login(context.Background(), site); err != nil {
+			t.Fatalf("Login(%q): %v", site, err)
+		}
+	}
+	if err := p.Login(context.Background(), "mars"); err == nil {
+		t.Fatal("Login should reject unknown site")
+	}
+	var _ providers.Authenticator = p
+}
+
 func readFile(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)

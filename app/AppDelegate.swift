@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let notifier = NotificationConsumer()
     private var timer: Timer?
     private var balances: [BalanceState] = []
+    private var loggingIn = false
 
     // MARK: - 生命周期
 
@@ -58,6 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(console)
         }
 
+        if balances.contains(where: { $0.provider == "bailian" }) {
+            menu.addItem(bailianLoginItem())
+        }
+
         let cache = NSMenuItem(title: "打开数据目录", action: #selector(openCacheDir), keyEquivalent: "")
         cache.target = self
         menu.addItem(cache)
@@ -77,6 +82,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quit)
 
         statusItem.menu = menu
+    }
+
+    private func bailianLoginItem() -> NSMenuItem {
+        if loggingIn {
+            return Self.disabled("登录百炼（等待浏览器完成登录…）")
+        }
+        let item = NSMenuItem(title: "登录百炼", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for (title, site) in [("国内站", "domestic"), ("国际站", "international")] {
+            let s = NSMenuItem(title: title, action: #selector(loginBailian(_:)), keyEquivalent: "")
+            s.target = self
+            s.representedObject = site
+            sub.addItem(s)
+        }
+        item.submenu = sub
+        return item
     }
 
     private func buildContent(in menu: NSMenu) {
@@ -241,6 +262,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let entry = Self.consoles.first(where: { $0.provider == provider }),
               let url = URL(string: entry.url) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    @objc private func loginBailian(_ sender: NSMenuItem) {
+        guard let site = sender.representedObject as? String, !loggingIn else { return }
+        loggingIn = true
+        rebuildUI()
+        daemon.login(provider: "bailian", site: site) { [weak self] failure in
+            guard let self else { return }
+            self.loggingIn = false
+            if let failure {
+                let alert = NSAlert()
+                alert.messageText = "百炼登录失败"
+                alert.informativeText = failure
+                alert.runModal()
+            } else {
+                self.daemon.restart()
+            }
+            self.refresh()
+        }
     }
 
     @objc private func openCacheDir() {

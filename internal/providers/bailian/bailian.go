@@ -25,6 +25,8 @@ const Name = "bailian"
 
 const defaultTimeout = 45 * time.Second
 
+const loginTimeout = 5 * time.Minute
+
 // Provider 执行 `bl usage token-plan --output json` 并解析结果。
 type Provider struct {
 	command string
@@ -75,6 +77,18 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 		{Name: "1-week quota", UsedPct: pctOrMinus1(tp.Per1Week), Remaining: -1, ResetAt: epochMs(tp.Per1WeekReset)},
 	}
 	return bal, nil
+}
+
+func (p *Provider) Login(ctx context.Context, site string) error {
+	if site != "domestic" && site != "international" {
+		return fmt.Errorf("未知站点 %q（可选: domestic, international）", site)
+	}
+	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
+	defer cancel()
+	if _, err := p.run(ctx, "auth", "login", "--console", "--console-site", site); err != nil {
+		return fmt.Errorf("百炼控制台登录失败: %w", err)
+	}
+	return nil
 }
 
 // run 执行 CLI 并返回 stdout；失败时把 stderr 带进错误信息。

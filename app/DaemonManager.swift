@@ -35,6 +35,34 @@ final class DaemonManager {
         process = nil
     }
 
+    func login(provider: String, site: String, completion: @escaping (String?) -> Void) {
+        guard let bin = binaryURL, !isMissing else {
+            completion("daemon 缺失，请重新安装 Liquoten.app")
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let p = Process()
+            p.executableURL = bin
+            p.arguments = ["login", "-config", Self.configPath, "-site", site, provider]
+            let pipe = Pipe()
+            p.standardOutput = pipe
+            p.standardError = pipe
+            var failure: String?
+            do {
+                try p.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                p.waitUntilExit()
+                if p.terminationStatus != 0 {
+                    failure = String(decoding: data, as: UTF8.self)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            } catch {
+                failure = error.localizedDescription
+            }
+            DispatchQueue.main.async { completion(failure) }
+        }
+    }
+
     private func spawn() {
         guard let bin = binaryURL,
               FileManager.default.isExecutableFile(atPath: bin.path) else { return }
