@@ -312,6 +312,14 @@ struct SectionCard: View {
 
     private var window: (start: Date, end: Date) {
         let span: TimeInterval = section.name == "1-week quota" ? 7 * 86400 : 5 * 3600
+        if section.name == "1-month quota" {
+            let cal = Calendar.current
+            if let reset = section.resetAt, reset > now, let start = cal.date(byAdding: .month, value: -1, to: reset) {
+                return (start, reset)
+            }
+            let start = cal.startOfDay(for: now).addingTimeInterval(-29 * 86400)
+            return (start, start.addingTimeInterval(30 * 86400))
+        }
         if let reset = section.resetAt, reset > now {
             return (reset.addingTimeInterval(-span), reset)
         }
@@ -327,7 +335,7 @@ struct SectionCard: View {
         switch section.name {
         case "5-hour quota":
             return window.start.formatted(date: .omitted, time: .shortened) + " 开始"
-        case "1-week quota":
+        case "1-week quota", "1-month quota":
             return "每天用量"
         default:
             return Style.historyLabel(section.name)
@@ -342,7 +350,13 @@ struct SectionCard: View {
                        current: section.usedPct, color: tint)
                 .frame(height: 46)
         case "1-week quota":
-            WeekBars(points: points, start: window.start, now: now, current: section.usedPct, color: tint)
+            DayBars(points: points, start: window.start, days: 7, now: now, current: section.usedPct,
+                    color: tint, compact: false)
+                .frame(height: 46)
+        case "1-month quota":
+            DayBars(points: points, start: window.start,
+                    days: max(1, Int((window.end.timeIntervalSince(window.start) / 86400).rounded())),
+                    now: now, current: section.usedPct, color: tint, compact: true)
                 .frame(height: 46)
         default:
             Sparkline(points: points, window: Style.historyWindow(section.name), now: now, color: tint)
@@ -728,12 +742,14 @@ struct MinuteLine: View {
     }
 }
 
-struct WeekBars: View {
+struct DayBars: View {
     let points: [HistoryPoint]
     let start: Date
+    let days: Int
     let now: Date
     let current: Double
     let color: Color
+    let compact: Bool
 
     private struct Slot {
         let label: String
@@ -748,7 +764,7 @@ struct WeekBars: View {
         let hasBefore = points.contains { $0.time < start }
         var ends: [Double?] = []
         var out: [Slot] = []
-        for i in 0..<7 {
+        for i in 0..<days {
             let s = start.addingTimeInterval(Double(i) * 86400)
             let e = s.addingTimeInterval(86400)
             let label = names[cal.component(.weekday, from: s) - 1]
@@ -779,30 +795,55 @@ struct WeekBars: View {
         let slots = self.slots
         let peak = max(1, slots.compactMap(\.delta).max() ?? 1)
         GeometryReader { geo in
-            let labelH: CGFloat = 11, valueH: CGFloat = 10
-            let barArea = geo.size.height - labelH - valueH
-            HStack(alignment: .bottom, spacing: 4) {
-                ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
-                    VStack(spacing: 1) {
-                        Text(slot.delta.map { $0 >= 0.5 ? "\(Int($0.rounded()))" : "" } ?? (slot.isFuture ? "" : "?"))
-                            .font(.system(size: 8))
-                            .foregroundStyle(.secondary)
-                            .frame(height: valueH)
-                        ZStack(alignment: .bottom) {
-                            RoundedRectangle(cornerRadius: 2).fill(Color.primary.opacity(0.06))
-                            if let d = slot.delta, d > 0 {
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(color.opacity(slot.isToday ? 1 : 0.55))
-                                    .frame(height: max(2, barArea * CGFloat(d / peak)))
+            let labelH: CGFloat = 11, valueH: CGFloat = compact ? 0 : 10
+            let barArea = geo.size.height - labelH - valueH - 1
+            VStack(spacing: 1) {
+                HStack(alignment: .bottom, spacing: compact ? 2 : 4) {
+                    ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
+                        VStack(spacing: 1) {
+                            if !compact {
+                                Text(slot.delta.map { $0 >= 0.5 ? "\(Int($0.rounded()))" : "" } ?? (slot.isFuture ? "" : "?"))
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(.secondary)
+                                    .frame(height: valueH)
+                            }
+                            ZStack(alignment: .bottom) {
+                                RoundedRectangle(cornerRadius: compact ? 1.5 : 2)
+                                    .fill(Color.primary.opacity(slot.delta == nil && !slot.isFuture ? 0.03 : 0.06))
+                                if let d = slot.delta, d > 0 {
+                                    RoundedRectangle(cornerRadius: compact ? 1.5 : 2)
+                                        .fill(color.opacity(slot.isToday ? 1 : 0.55))
+                                        .frame(height: max(2, barArea * CGFloat(d / peak)))
+                                }
+                                if slot.isToday {
+                                    RoundedRectangle(cornerRadius: compact ? 1.5 : 2)
+                                        .strokeBorder(color.opacity(0.6), lineWidth: 1)
+                                }
+                            }
+                            .frame(height: barArea)
+                            if !compact {
+                                Text(slot.label)
+                                    .font(.system(size: 9, weight: slot.isToday ? .bold : .regular))
+                                    .foregroundStyle(slot.isToday ? .primary : .secondary)
+                                    .frame(height: labelH)
                             }
                         }
-                        .frame(height: barArea)
-                        Text(slot.label)
-                            .font(.system(size: 9, weight: slot.isToday ? .bold : .regular))
-                            .foregroundStyle(slot.isToday ? .primary : .secondary)
-                            .frame(height: labelH)
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
+                }
+                if compact {
+                    HStack {
+                        Text(start.formatted(.dateTime.month(.defaultDigits).day()))
+                        Spacer()
+                        if let peakDay = slots.compactMap(\.delta).max(), peakDay >= 0.5 {
+                            Text("单日最多 \(Int(peakDay.rounded()))%")
+                            Spacer()
+                        }
+                        Text(start.addingTimeInterval(Double(days - 1) * 86400).formatted(.dateTime.month(.defaultDigits).day()))
+                    }
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .frame(height: labelH)
                 }
             }
         }
