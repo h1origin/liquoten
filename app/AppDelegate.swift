@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         refresh()
         loadProviders()
 
-        // 60 秒刷新一次菜单栏与通知；daemon 自己按 15 分钟节奏轮询。
+        // 60 秒刷新一次菜单栏与通知；daemon 自己按 1 分钟节奏轮询。
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.refresh()
         }

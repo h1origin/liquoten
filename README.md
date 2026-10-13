@@ -13,13 +13,13 @@ macOS 菜单栏实时显示 LLM 额度/余额的轻量监控工具。只读轮�
 ## 工作原理
 
 ```
-bailian-cli (官方 CLI)  →  daemon 每 15min 轮询  →  state.json / history.jsonl
+bailian-cli (官方 CLI)  →  daemon 每 1min 轮询  →  state.json / history.jsonl
                                                  ↘ 阈值升穿 → notifications.jsonl
 state.json          ← Liquoten.app 只读渲染菜单栏
 notifications.jsonl ← Liquoten.app 消费并投递系统通知
 ```
 
-一次轮询：对每个到期的 provider 调 `Query()`（百炼按 `poll_interval`，默认 15 分钟；Claude Code 只读本地文件，每分钟一次），结果落盘缓存（原子写）并追加历史，然后过阈值状态机（升穿发一次通知，回落复位，重启后状态不丢）。
+一次轮询：对每个到期的 provider 调 `Query()`（默认每 1 分钟，带 ±10% 抖动，可用 `poll_interval` 调整；Claude Code 只读本地文件，最多每分钟一次），结果落盘缓存（原子写）并追加历史，然后过阈值状态机（升穿发一次通知，回落复位，重启后状态不丢）。
 
 daemon 由 App 作为子进程拉起（意外退出 5 秒后自动重启）；App 只读 daemon 写出的文件，60 秒刷新一次菜单栏，两个进程各管各的，无共享内存。
 
@@ -199,7 +199,7 @@ rm -rf ~/.cache/liquoten ~/.config/liquoten
 - **为什么走官方 CLI**：百炼 Token Plan 的额度接口是控制台内部网关（未公开），官方开源 CLI 是稳定的封装，Go 侧 exec 它拿 JSON，避免直连脆弱的内部接口
 - **Token Plan 没有"绝对剩余 credits"**：官方只暴露滚动窗口的已用百分比，菜单栏展示与官方控制台对齐
 - **通知走文件而不是进程间通信**：daemon 追加写 jsonl、App 定时消费，两端零耦合——任一端挂掉不影响另一端，重启后游标去重不重发
-- **历史数据**：`~/.cache/liquoten/history.jsonl` 每轮追加一行，15min 间隔约 96 行/天（v1 用 JSONL 而非 SQLite，零依赖；做趋势看板时再评估迁移）
+- **历史数据**：`~/.cache/liquoten/history.jsonl` 只在读数变化时追加，读数不变则每 15 分钟记一条心跳（v1 用 JSONL 而非 SQLite，零依赖；做趋势看板时再评估迁移）
 - **失败降级**：查询连续失败 3 次告警一次；`bl` 未安装时 daemon 启动即报错并给出提示
 - **Free tier**：百炼按模型粒度的免费额度查询留到 v1.1（数据在 `bl usage free --output json`，结构已核实）
 

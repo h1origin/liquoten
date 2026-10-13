@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	// DefaultPollInterval 是 daemon 默认轮询间隔（实际带 ±10% 抖动，约 13.5–16.5 分钟）。
-	DefaultPollInterval = 15 * time.Minute
+	// DefaultPollInterval 是 daemon 默认轮询间隔（实际带 ±10% 抖动，约 54–66 秒）。
+	DefaultPollInterval = time.Minute
 	// DefaultTimeout 是单次 provider 查询的默认超时。
 	DefaultTimeout = 45 * time.Second
 )

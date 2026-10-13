@@ -9,7 +9,7 @@
 #   - notify = "app"（默认）把告警事件写入缓存目录，由 Liquoten.app 投递系统通知；
 #     notify = "osascript" 则由 daemon 直接用 macOS 通知（无 App 时的回退方案）
 
-poll_interval = "15m"
+poll_interval = "1m"
 # notify = "app"
 
 [providers.bailian]
