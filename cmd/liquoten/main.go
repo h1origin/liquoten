@@ -121,7 +121,7 @@ func main() {
 				bal = providers.Balance{Provider: p.Name(), FetchedAt: time.Now(), Err: err.Error()}
 			}
 			prev, seen := latest[p.Name()]
-			if !seen || every(p) == base || prev.Err != bal.Err || !reflect.DeepEqual(prev.Sections, bal.Sections) {
+			if !seen || prev.Err != bal.Err || !reflect.DeepEqual(prev.Sections, bal.Sections) {
 				logBalance(bal)
 			}
 			latest[p.Name()] = bal
