@@ -53,3 +53,34 @@ func liquotenDecoder() -> JSONDecoder {
     }
     return d
 }
+
+struct HistoryPoint {
+    let time: Date
+    let usedPct: Double
+}
+
+private struct HistoryEntry: Decodable {
+    let time: Date
+    let provider: String
+    let sections: [SectionState]?
+}
+
+enum HistoryReader {
+    static func read(since: Date) -> [String: [HistoryPoint]] {
+        let url = URL(fileURLWithPath: DaemonManager.cacheDir).appendingPathComponent("history.jsonl")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [:] }
+        let decoder = liquotenDecoder()
+        var out: [String: [HistoryPoint]] = [:]
+        for line in text.split(separator: "\n") {
+            guard let e = try? decoder.decode(HistoryEntry.self, from: Data(line.utf8)), e.time >= since else { continue }
+            for s in e.sections ?? [] where s.usedPct >= 0 {
+                out[key(e.provider, s.name), default: []].append(HistoryPoint(time: e.time, usedPct: s.usedPct))
+            }
+        }
+        return out
+    }
+
+    static func key(_ provider: String, _ section: String) -> String {
+        "\(provider)/\(section)"
+    }
+}

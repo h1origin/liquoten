@@ -16,7 +16,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -target "$ARCH-apple-macos13.0" \
   -o "$APP/Contents/MacOS/$APP_NAME" \
   app/main.swift app/Models.swift app/DaemonManager.swift \
-  app/NotificationConsumer.swift app/AppDelegate.swift
+  app/NotificationConsumer.swift app/Dashboard.swift app/AppDelegate.swift
 
 echo "==> 编译 Go daemon"
 GOOS=darwin GOARCH="$ARCH" CGO_ENABLED=0 \
