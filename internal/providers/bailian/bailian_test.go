@@ -75,6 +75,45 @@ func TestParseTokenPlanMissingFields(t *testing.T) {
 	}
 }
 
+func TestParseTokenPlanMonthOnly(t *testing.T) {
+	tp, err := parseTokenPlan(readFile(t, filepath.Join("testdata", "tokenplan-month.json")))
+	if err != nil {
+		t.Fatalf("parseTokenPlan: %v", err)
+	}
+	got := sections(tp)
+	if len(got) != 1 {
+		t.Fatalf("len(sections) = %d, want 1: %+v", len(got), got)
+	}
+	s := got[0]
+	if s.Name != "1-month quota" || s.UsedPct != 0 || s.Remaining != -1 {
+		t.Fatalf("section = %+v, want 1-month quota 0%%", s)
+	}
+	if want := time.UnixMilli(1791907200000); !s.ResetAt.Equal(want) {
+		t.Fatalf("ResetAt = %v, want %v", s.ResetAt, want)
+	}
+}
+
+func TestParseTokenPlanMonthEnvelope(t *testing.T) {
+	tp, err := parseTokenPlan([]byte(`{"data":{"per1MonthPercentage":0.42,"per1MonthResetTime":1791907200000}}`))
+	if err != nil {
+		t.Fatalf("parseTokenPlan: %v", err)
+	}
+	got := sections(tp)
+	if len(got) != 1 || got[0].UsedPct != 42 {
+		t.Fatalf("sections = %+v, want 1-month quota 42%%", got)
+	}
+}
+
+func TestSectionsEmptyWhenNoFields(t *testing.T) {
+	tp, err := parseTokenPlan([]byte(`{}`))
+	if err != nil {
+		t.Fatalf("parseTokenPlan: %v", err)
+	}
+	if got := sections(tp); len(got) != 0 {
+		t.Fatalf("sections = %+v, want empty", got)
+	}
+}
+
 func TestQueryWithFakeCLI(t *testing.T) {
 	p := New(providers.Options{Command: filepath.Join("testdata", "fake-bl.sh")})
 	bal, err := p.Query(context.Background())

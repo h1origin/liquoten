@@ -116,6 +116,8 @@ func shortName(name string) string {
 		return "5h"
 	case "1-week quota":
 		return "周"
+	case "1-month quota":
+		return "月"
 	default:
 		return name
 	}

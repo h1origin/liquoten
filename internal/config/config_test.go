@@ -21,6 +21,9 @@ func TestDefaults(t *testing.T) {
 	if got := cfg.Thresholds["bailian"]["5-hour quota"]; got != 80 {
 		t.Fatalf("默认 5-hour 阈值 = %v, want 80", got)
 	}
+	if got := cfg.Thresholds["bailian"]["1-month quota"]; got != 90 {
+		t.Fatalf("默认 1-month 阈值 = %v, want 90", got)
+	}
 }
 
 func TestLoadUserConfig(t *testing.T) {

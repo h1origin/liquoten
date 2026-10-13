@@ -46,8 +46,9 @@ func Default() Config {
 		},
 		Thresholds: map[string]map[string]float64{
 			"bailian": {
-				"5-hour quota": 80,
-				"1-week quota": 90,
+				"5-hour quota":  80,
+				"1-week quota":  90,
+				"1-month quota": 90,
 			},
 		},
 	}

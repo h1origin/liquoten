@@ -72,11 +72,31 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 		return bal, fmt.Errorf("解析 token-plan 输出失败: %w", err)
 	}
 
-	bal.Sections = []providers.Section{
-		{Name: "5-hour quota", UsedPct: pctOrMinus1(tp.Per5Hour), Remaining: -1, ResetAt: epochMs(tp.Per5HourReset)},
-		{Name: "1-week quota", UsedPct: pctOrMinus1(tp.Per1Week), Remaining: -1, ResetAt: epochMs(tp.Per1WeekReset)},
+	bal.Sections = sections(tp)
+	if len(bal.Sections) == 0 {
+		return bal, fmt.Errorf("token-plan 输出中没有可识别的额度字段: %s", strings.TrimSpace(string(out)))
 	}
 	return bal, nil
+}
+
+func sections(tp tokenPlan) []providers.Section {
+	windows := []struct {
+		name  string
+		pct   *float64
+		reset *int64
+	}{
+		{"5-hour quota", tp.Per5Hour, tp.Per5HourReset},
+		{"1-week quota", tp.Per1Week, tp.Per1WeekReset},
+		{"1-month quota", tp.Per1Month, tp.Per1MonthReset},
+	}
+	var out []providers.Section
+	for _, w := range windows {
+		if w.pct == nil {
+			continue
+		}
+		out = append(out, providers.Section{Name: w.name, UsedPct: pctOrMinus1(w.pct), Remaining: -1, ResetAt: epochMs(w.reset)})
+	}
+	return out
 }
 
 func (p *Provider) Login(ctx context.Context, site string) error {
@@ -114,10 +134,12 @@ func (p *Provider) run(ctx context.Context, args ...string) ([]byte, error) {
 // tokenPlan 对应 `bl usage token-plan --output json` 的输出字段。
 // API 返回的百分比是 [0,1] 比值，重置时间是毫秒 epoch。
 type tokenPlan struct {
-	Per5Hour      *float64 `json:"per5HourPercentage"`
-	Per5HourReset *int64   `json:"per5HourResetTime"`
-	Per1Week      *float64 `json:"per1WeekPercentage"`
-	Per1WeekReset *int64   `json:"per1WeekResetTime"`
+	Per5Hour       *float64 `json:"per5HourPercentage"`
+	Per5HourReset  *int64   `json:"per5HourResetTime"`
+	Per1Week       *float64 `json:"per1WeekPercentage"`
+	Per1WeekReset  *int64   `json:"per1WeekResetTime"`
+	Per1Month      *float64 `json:"per1MonthPercentage"`
+	Per1MonthReset *int64   `json:"per1MonthResetTime"`
 }
 
 // parseTokenPlan 兼容两种形态：直接对象，或 {"data": {...}} 信封。
@@ -127,7 +149,7 @@ func parseTokenPlan(raw []byte) (tokenPlan, error) {
 	if err := json.Unmarshal(raw, &tp); err != nil {
 		return tp, err
 	}
-	if tp.Per5Hour == nil && tp.Per1Week == nil {
+	if tp.Per5Hour == nil && tp.Per1Week == nil && tp.Per1Month == nil {
 		var envelope struct {
 			Data tokenPlan `json:"data"`
 		}

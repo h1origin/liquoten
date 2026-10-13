@@ -20,6 +20,7 @@ enabled = true
 [thresholds.bailian]
 "5-hour quota" = 80.0
 "1-week quota" = 90.0
+"1-month quota" = 90.0   # 按月计费的 Token Plan 只有这一项
 
 # Claude Code 订阅（Pro/Max）5 小时 / 7 天用量。数据由 Claude Code 的 statusLine
 # 命令 `liquoten statusline` 落盘到缓存目录，配置方法见 README。

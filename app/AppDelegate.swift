@@ -164,14 +164,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch name {
         case "5-hour quota": return "5h"
         case "1-week quota": return "周"
+        case "1-month quota": return "月"
+        default: return name
+        }
+    }
+
+    static func sectionTitle(_ name: String) -> String {
+        switch name {
+        case "5-hour quota": return "5 小时额度"
+        case "1-week quota": return "每周额度"
+        case "1-month quota": return "月度额度"
         default: return name
         }
     }
 
     static func sectionLine(provider: String, _ s: SectionState) -> String {
-        var line = "\(displayName(provider)) · \(s.name): \(fmtPct(s.usedPct))%"
+        var line = "\(displayName(provider)) · \(sectionTitle(s.name)): \(fmtPct(s.usedPct))%"
         if s.usedPct < 0 {
-            line = "\(displayName(provider)) · \(s.name): 无限制"
+            line = "\(displayName(provider)) · \(sectionTitle(s.name)): 无限制"
         }
         if let reset = s.resetAt, reset > Date() {
             line += "（\(countdown(to: reset)) 后重置）"
