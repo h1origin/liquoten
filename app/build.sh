@@ -22,18 +22,23 @@ swift_parts=()
 go_parts=()
 for arch in $ARCHS; do
   echo "==> 编译 Swift App（${arch}）"
-  swiftc -O -target "$arch-apple-macos13.0" -o "$TMP/$APP_NAME-$arch" "${SOURCES[@]}"
-  swift_parts+=("$TMP/$APP_NAME-$arch")
+  swiftc -O -target "$arch-apple-macos13.0" -o "$TMP/app-$arch" "${SOURCES[@]}"
+  swift_parts+=("$TMP/app-$arch")
 
   echo "==> 编译 Go daemon（${arch}）"
   goarch="$arch"
   [ "$arch" = "x86_64" ] && goarch="amd64"
   GOOS=darwin GOARCH="$goarch" CGO_ENABLED=0 \
-    go build -trimpath -o "$TMP/liquoten-$arch" ./cmd/liquoten
-  go_parts+=("$TMP/liquoten-$arch")
+    go build -trimpath -o "$TMP/daemon-$arch" ./cmd/liquoten
+  go_parts+=("$TMP/daemon-$arch")
 done
 lipo -create -output "$APP/Contents/MacOS/$APP_NAME" "${swift_parts[@]}"
 lipo -create -output "$APP/Contents/Resources/liquoten" "${go_parts[@]}"
+# 文件系统默认不区分大小写，主程序被 Go daemon 覆盖时 App 会无界面运行，这里兜底拦截。
+if go version "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null | grep -q ": go1"; then
+  echo "错误: $APP/Contents/MacOS/$APP_NAME 是 Go 程序而不是 Swift App" >&2
+  exit 1
+fi
 
 echo "==> 生成图标"
 swiftc -O -target "$HOST_ARCH-apple-macos13.0" -o "$TMP/make-icon" app/Droplet.swift app/icon/main.swift
