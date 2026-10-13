@@ -50,10 +50,11 @@ enum Droplet {
             shape.lineWidth = 1.4
             if let remaining {
                 let level = CGFloat(remaining / 100)
+                let inner = body.insetBy(dx: 2.3, dy: 2.1)
                 NSGraphicsContext.saveGraphicsState()
-                shape.addClip()
+                outline(in: inner).addClip()
                 (tint ?? .black).setFill()
-                water(in: body, level: level, amplitude: level > 0.02 && level < 0.98 ? 0.45 : 0).fill()
+                water(in: inner, level: level, amplitude: level > 0.05 && level < 0.95 ? 0.4 : 0).fill()
                 NSGraphicsContext.restoreGraphicsState()
                 (tint == nil ? NSColor.black : NSColor.labelColor).setStroke()
             } else {
