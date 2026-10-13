@@ -107,8 +107,24 @@ func main() {
 	}
 	latest := map[string]providers.Balance{}
 	due := map[string]time.Time{}
+	var lastPrune time.Time
+	prune := func(now time.Time) {
+		if now.Sub(lastPrune) < 24*time.Hour {
+			return
+		}
+		lastPrune = now
+		n, err := st.PruneHistory(now.Add(-store.HistoryRetention))
+		if err != nil {
+			log.Printf("清理历史失败: %v", err)
+			return
+		}
+		if n > 0 {
+			log.Printf("清理历史：删除 %d 条 %s 以前的记录", n, now.Add(-store.HistoryRetention).Format("2006-01-02 15:04"))
+		}
+	}
 
 	poll := func(now time.Time) {
+		prune(now)
 		var polled []providers.Balance
 		for _, p := range provs {
 			if now.Before(due[p.Name()]) {

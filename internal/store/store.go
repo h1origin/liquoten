@@ -7,6 +7,8 @@
 package store
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,7 +17,10 @@ import (
 	"github.com/lk/liquoten-cred/internal/providers"
 )
 
-const HistoryHeartbeat = 15 * time.Minute
+const (
+	HistoryHeartbeat = 15 * time.Minute
+	HistoryRetention = 35 * 24 * time.Hour
+)
 
 // Store 封装缓存目录下的读写。
 type Store struct {
@@ -114,4 +119,45 @@ func sameReading(a, b historyEntry) bool {
 		}
 	}
 	return true
+}
+
+func (s *Store) PruneHistory(before time.Time) (int, error) {
+	path := filepath.Join(s.dir, "history.jsonl")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	var kept bytes.Buffer
+	removed := 0
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var e struct {
+			Time time.Time `json:"time"`
+		}
+		if json.Unmarshal(line, &e) == nil && !e.Time.IsZero() && e.Time.Before(before) {
+			removed++
+			continue
+		}
+		kept.Write(line)
+		kept.WriteByte('\n')
+	}
+	if err := sc.Err(); err != nil {
+		return 0, err
+	}
+	if removed == 0 {
+		return 0, nil
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, kept.Bytes(), 0o644); err != nil {
+		return 0, err
+	}
+	return removed, os.Rename(tmp, path)
 }

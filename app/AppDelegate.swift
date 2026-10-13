@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func refresh() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let balances = StateReader.read() ?? []
-            let history = HistoryReader.read(since: Date().addingTimeInterval(-30 * 86400))
+            let history = HistoryReader.read(since: Date().addingTimeInterval(-35 * 86400))
             self?.notifier.consume()
             DispatchQueue.main.async {
                 self?.balances = balances

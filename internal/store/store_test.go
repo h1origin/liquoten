@@ -106,3 +106,48 @@ func countLines(t *testing.T, path string) int {
 	}
 	return lines
 }
+
+func TestPruneHistory(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "history.jsonl")
+	content := `{"time":"2026-08-01T00:00:00Z","provider":"bailian"}
+{"time":"2026-09-08T23:59:59Z","provider":"bailian"}
+not-json-line
+{"time":"2026-09-09T00:00:00Z","provider":"claudecode"}
+
+{"time":"2026-10-13T12:00:00Z","provider":"codex"}
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(dir)
+	removed, err := s.PruneHistory(time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 2 {
+		t.Fatalf("removed = %d, want 2", removed)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "not-json-line\n{\"time\":\"2026-09-09T00:00:00Z\",\"provider\":\"claudecode\"}\n{\"time\":\"2026-10-13T12:00:00Z\",\"provider\":\"codex\"}\n"
+	if string(data) != want {
+		t.Fatalf("剩余内容:\n%s\nwant:\n%s", data, want)
+	}
+
+	if err := s.AppendHistory(sampleBalances()); err != nil {
+		t.Fatal(err)
+	}
+	if lines := countLines(t, path); lines != 4 {
+		t.Fatalf("清理后应可继续追加，行数 = %d, want 4", lines)
+	}
+}
+
+func TestPruneHistoryMissingFile(t *testing.T) {
+	removed, err := New(t.TempDir()).PruneHistory(time.Now())
+	if err != nil || removed != 0 {
+		t.Fatalf("removed = %d, err = %v", removed, err)
+	}
+}
