@@ -6,7 +6,7 @@ macOS 菜单栏实时显示 LLM 额度/余额的轻量监控工具。只读轮�
 
 > 架构图为可编辑的 Excalidraw 源文件：[docs/liquoten-architecture.excalidraw](docs/liquoten-architecture.excalidraw)（拖入 excalidraw.com 或 VS Code 插件编辑）
 
-- **当前支持**：阿里云百炼 Token Plan、Claude Code 订阅（Pro/Max）、ChatGPT Codex 订阅（读本地会话记录），5 小时 / 1 周滚动配额（百炼按月计费的套餐为月度配额）百分比 + 重置倒计时
+- **当前支持**：阿里云百炼 Token Plan、Claude Code 订阅（Pro/Max）、ChatGPT Codex 订阅（读本地会话记录）、Qoder / Qoder CN（个人访问令牌查 Credits），5 小时 / 1 周滚动配额（百炼按月计费的套餐为月度配额）百分比 + 重置倒计时
 - **形态**：原生 Swift 菜单栏 App（Liquoten.app）+ Go daemon；阈值升穿发 macOS 系统通知
 - **通用性**：新增 provider = 实现 `providers.Provider` 接口 + 一行注册，展示层无需改动
 
@@ -138,6 +138,14 @@ cat ~/.cache/liquoten/state.json                            # 与控制台百分
 
 手工场景：把 `config.toml` 阈值临时调低（如 10%）再 `-once`，应弹系统通知；临时断网，菜单栏应显示错误态。单测覆盖：百炼 JSON 解析（录制 fixture，CLI 输出格式变了测试先红）、阈值状态机（含重启持久化）、store 原子写回读、config 合并、FileNotifier 事件追加。
 
+## 服务开关
+
+App 的“服务”页通过 daemon 子命令改写配置：
+
+- `liquoten enable [-api-key-stdin] <name>`：需要 API Key 的服务（Qoder / Qoder CN）从标准输入读 key 并实际查询一次，验证通过才写入；依赖外部工具的服务（百炼）先检查 `bl`，找不到时退出码 3，App 提示执行 `liquoten install bailian`（即 `npm install -g bailian-cli`），装不上开关保持关闭。找到的 `bl` 绝对路径会写进 `command`，避免从 Finder 启动时 PATH 里没有 npm 全局目录。
+- `liquoten disable <name>`：停用并删除 `api_key`。
+- 含 `api_key` 的配置文件以 0600 权限写入。
+
 ## 扩展新 provider
 
 1. 新建 `internal/providers/<name>/<name>.go`，实现 `providers.Provider` 接口并在 `init()` 里 `providers.Register`
@@ -150,6 +158,7 @@ cat ~/.cache/liquoten/state.json                            # 与控制台百分
 |---|---|---|
 | 百炼 Token Plan | 官方 CLI `bl usage token-plan --output json` | 5h/周/月窗口已用百分比（只展示套餐实际返回的窗口） |
 | Claude Code 订阅 | statusLine stdin 的 `rate_limits`（`liquoten statusline` 落盘） | 5h/周窗口已用百分比 |
+| Qoder / Qoder CN | 个人访问令牌换 job token 后 `GET openapi.qoder.sh` / `openapi.qoder.com.cn` 的 `/api/v2/quota/usage`（未见官方文档，参照社区插件 pi-provider-qoder-cn） | `userQuota` → 本计费周期 `1-month quota` 已用百分比 + 剩余 Credits；`addOnQuota` → `credits` 余额 |
 | ChatGPT Codex 订阅 | `~/.codex/sessions/**/*.jsonl` 里最新的 `token_count` 事件的 `rate_limits`（`CODEX_HOME` 可覆盖目录） | 按 `window_minutes` 映射窗口（300 → 5h、10080 → 周，其他按时长命名）；credits 余额放 `Remaining` |
 | OpenAI API（按量） | `GET api.openai.com/v1/dashboard/billing/subscription` | hard/soft limit USD |
 | Anthropic API（按量） | Admin API `GET /v1/organizations/cost_report` | 本月累计费用 |
@@ -170,6 +179,7 @@ internal/config/       配置加载（TOML + 环境变量）
 internal/providers/    Provider 接口 + 注册表
   bailian/             百炼 adapter（exec bailian-cli + fixture 单测）
   claudecode/          Claude Code adapter（statusline 落盘 + 读快照）
+  qoder/               Qoder / Qoder CN adapter（PAT 换 token + 查额度，httptest 单测）
 internal/store/        state.json 原子写 + history.jsonl 追加
 internal/alert/        阈值状态机 + 通知通道（FileNotifier / osascript）
 swiftbar/              菜单栏插件（xbar 协议输出，legacy 路线）

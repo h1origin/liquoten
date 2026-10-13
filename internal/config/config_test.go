@@ -173,3 +173,47 @@ command = "/opt/homebrew/bin/bl"
 		t.Fatalf("注释应保留:\n%s", text)
 	}
 }
+
+func TestSetProviderAPIKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `[providers.qodercn]
+enabled = false
+timeout = "30s"
+
+[thresholds.qodercn]
+"1-month quota" = 80.0
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	on, key := true, `pt-a"b\c`
+	if err := SetProvider(path, "qodercn", ProviderUpdate{Enabled: &on, APIKey: &key}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc := cfg.Providers["qodercn"]
+	if !pc.IsEnabled() || pc.APIKey != key || pc.Timeout != 30*time.Second {
+		t.Fatalf("qodercn = %+v", pc)
+	}
+	if st, err := os.Stat(path); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("含 api_key 的配置应为 0600: %v %v", st.Mode().Perm(), err)
+	}
+
+	off := false
+	if err := SetProvider(path, "qodercn", ProviderUpdate{Enabled: &off, Delete: []string{"api_key"}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc := cfg.Providers["qodercn"]; pc.IsEnabled() || pc.APIKey != "" {
+		t.Fatalf("关闭后应禁用并删除 api_key: %+v", pc)
+	}
+	if got := cfg.Thresholds["qodercn"]["1-month quota"]; got != 80 {
+		t.Fatalf("阈值被破坏: %v", got)
+	}
+}

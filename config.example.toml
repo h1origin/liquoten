@@ -37,3 +37,11 @@ enabled = true
 # [thresholds.codex]
 # "5-hour quota" = 80.0
 # "1-week quota" = 90.0
+
+# Qoder（qoder）/ Qoder CN（qodercn）：用个人访问令牌查询本计费周期 Credits。
+# 在 App“服务”页打开开关时弹窗填写并验证，关闭时从本文件删除 api_key。
+# [providers.qodercn]
+# api_key = "在 qoder.com.cn/account/integrations 生成的令牌"
+#
+# [thresholds.qodercn]
+# "1-month quota" = 90.0

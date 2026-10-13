@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,6 +60,12 @@ func Default() Config {
 			"codex": {
 				"5-hour quota": 80,
 				"1-week quota": 90,
+			},
+			"qoder": {
+				"1-month quota": 90,
+			},
+			"qodercn": {
+				"1-month quota": 90,
 			},
 		},
 	}
@@ -127,14 +134,37 @@ func DefaultPath() string {
 }
 
 func SetEnabled(path, name string, enabled bool) error {
+	return SetProvider(path, name, ProviderUpdate{Enabled: &enabled})
+}
+
+// ProviderUpdate 描述对 [providers.<name>] 的改写：非 nil 字段写入，Delete 中的键删除。
+type ProviderUpdate struct {
+	Enabled *bool
+	APIKey  *string
+	Command *string
+	Delete  []string
+}
+
+// SetProvider 原地改写配置文件中的 [providers.<name>]，保留其余内容与注释。
+// 文件可能含 api_key，统一以 0600 写入。
+func SetProvider(path, name string, u ProviderUpdate) error {
 	data, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	value := fmt.Sprintf("enabled = %t", enabled)
+	var set [][2]string
+	if u.Enabled != nil {
+		set = append(set, [2]string{"enabled", fmt.Sprintf("%t", *u.Enabled)})
+	}
+	if u.APIKey != nil {
+		set = append(set, [2]string{"api_key", tomlString(*u.APIKey)})
+	}
+	if u.Command != nil {
+		set = append(set, [2]string{"command", tomlString(*u.Command)})
+	}
 	header := regexp.MustCompile(`^\s*\[\s*providers\.` + regexp.QuoteMeta(name) + `\s*\]\s*(#.*)?$`)
-	enabledLine := regexp.MustCompile(`^\s*enabled\s*=`)
 	table := regexp.MustCompile(`^\s*\[`)
+	keyLine := func(key string) *regexp.Regexp { return regexp.MustCompile(`^\s*` + regexp.QuoteMeta(key) + `\s*=`) }
 
 	text := strings.TrimRight(string(data), "\n")
 	lines := strings.Split(text, "\n")
@@ -149,30 +179,53 @@ func SetEnabled(path, name string, enabled bool) error {
 		}
 	}
 	if start < 0 {
+		if len(set) == 0 {
+			return nil
+		}
 		if len(lines) > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, "[providers."+name+"]", value)
+		lines = append(lines, "[providers."+name+"]")
+		for _, kv := range set {
+			lines = append(lines, kv[0]+" = "+kv[1])
+		}
 	} else {
-		replaced := false
-		for i := start + 1; i < len(lines) && !table.MatchString(lines[i]); i++ {
-			if enabledLine.MatchString(lines[i]) {
-				lines[i] = value
-				replaced = true
-				break
+		end := start + 1
+		for end < len(lines) && !table.MatchString(lines[end]) {
+			end++
+		}
+		body := slices.Clone(lines[start+1 : end])
+		for _, key := range u.Delete {
+			re := keyLine(key)
+			body = slices.DeleteFunc(body, re.MatchString)
+		}
+		var added []string
+		for _, kv := range set {
+			re := keyLine(kv[0])
+			i := slices.IndexFunc(body, re.MatchString)
+			if i >= 0 {
+				body[i] = kv[0] + " = " + kv[1]
+			} else {
+				added = append(added, kv[0]+" = "+kv[1])
 			}
 		}
-		if !replaced {
-			lines = append(lines[:start+1], append([]string{value}, lines[start+1:]...)...)
-		}
+		body = append(added, body...)
+		lines = append(append(slices.Clone(lines[:start+1]), body...), lines[end:]...)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func tomlString(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`).Replace(s) + `"`
 }

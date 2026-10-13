@@ -36,11 +36,11 @@ final class DaemonManager {
     }
 
     func login(provider: String, site: String, completion: @escaping (String?) -> Void) {
-        run(["login", "-config", Self.configPath, "-site", site, provider]) { _, failure in completion(failure) }
+        run(["login", "-config", Self.configPath, "-site", site, provider]) { _, failure, _ in completion(failure) }
     }
 
     func listProviders(completion: @escaping ([ProviderInfo]) -> Void) {
-        run(["providers", "-config", Self.configPath]) { output, failure in
+        run(["providers", "-config", Self.configPath]) { output, failure, _ in
             guard failure == nil,
                   let list = try? JSONDecoder().decode([ProviderInfo].self, from: Data(output.utf8)) else {
                 completion([])
@@ -50,13 +50,36 @@ final class DaemonManager {
         }
     }
 
-    func setEnabled(provider: String, enabled: Bool, completion: @escaping (String?) -> Void) {
-        run([enabled ? "enable" : "disable", "-config", Self.configPath, provider]) { _, failure in completion(failure) }
+    enum EnableResult {
+        case ok
+        case notInstalled(String)
+        case failed(String)
     }
 
-    private func run(_ args: [String], completion: @escaping (String, String?) -> Void) {
+    // 与 daemon 的 exitNotInstalled 保持一致。
+    private static let exitNotInstalled: Int32 = 3
+
+    // API Key 经标准输入传给 daemon，不出现在进程参数里。
+    func enable(provider: String, apiKey: String?, completion: @escaping (EnableResult) -> Void) {
+        var args = ["enable", "-config", Self.configPath]
+        if apiKey != nil { args.append("-api-key-stdin") }
+        run(args + [provider], stdin: apiKey) { _, failure, status in
+            guard let failure else { return completion(.ok) }
+            completion(status == Self.exitNotInstalled ? .notInstalled(failure) : .failed(failure))
+        }
+    }
+
+    func disable(provider: String, completion: @escaping (String?) -> Void) {
+        run(["disable", "-config", Self.configPath, provider]) { _, failure, _ in completion(failure) }
+    }
+
+    func install(provider: String, completion: @escaping (String?) -> Void) {
+        run(["install", "-config", Self.configPath, provider]) { _, failure, _ in completion(failure) }
+    }
+
+    private func run(_ args: [String], stdin: String? = nil, completion: @escaping (String, String?, Int32) -> Void) {
         guard let bin = binaryURL, !isMissing else {
-            completion("", "daemon 缺失，请重新安装 Liquoten.app")
+            completion("", "daemon 缺失，请重新安装 Liquoten.app", -1)
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
@@ -66,18 +89,24 @@ final class DaemonManager {
             let pipe = Pipe()
             p.standardOutput = pipe
             p.standardError = pipe
+            let input = Pipe()
+            p.standardInput = input
             var output = ""
             var failure: String?
+            var status: Int32 = -1
             do {
                 try p.run()
+                if let stdin { input.fileHandleForWriting.write(Data(stdin.utf8)) }
+                try? input.fileHandleForWriting.close()
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 p.waitUntilExit()
+                status = p.terminationStatus
                 output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                if p.terminationStatus != 0 { failure = output }
+                if status != 0 { failure = output }
             } catch {
                 failure = error.localizedDescription
             }
-            DispatchQueue.main.async { completion(output, failure) }
+            DispatchQueue.main.async { completion(output, failure, status) }
         }
     }
 

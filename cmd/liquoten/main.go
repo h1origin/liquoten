@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 	_ "github.com/lk/liquoten-cred/internal/providers/bailian" // 注册 provider
 	"github.com/lk/liquoten-cred/internal/providers/claudecode"
 	_ "github.com/lk/liquoten-cred/internal/providers/codex"
+	_ "github.com/lk/liquoten-cred/internal/providers/qoder"
 	"github.com/lk/liquoten-cred/internal/store"
 )
 
@@ -34,9 +36,12 @@ func main() {
 		statusline()
 		return
 	}
-	if len(os.Args) > 1 && (os.Args[1] == "providers" || os.Args[1] == "enable" || os.Args[1] == "disable") {
+	if len(os.Args) > 1 && slices.Contains([]string{"providers", "enable", "disable", "install"}, os.Args[1]) {
 		if err := manageProviders(os.Args[1], os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			if errors.Is(err, providers.ErrNotInstalled) {
+				os.Exit(exitNotInstalled)
+			}
 			os.Exit(1)
 		}
 		return
@@ -197,24 +202,42 @@ func statusline() {
 	fmt.Println(claudecode.StatusLine(in))
 }
 
+// exitNotInstalled 是 enable 因依赖工具缺失而失败时的退出码，App 据此提示安装。
+const exitNotInstalled = 3
+
+// manageProviders 实现 providers / enable / disable / install 子命令，供 App 的“服务”页调用。
+//
+//	enable [-api-key-stdin] <name>：检查依赖（缺失时退出码 3），需要 key 的先验证 key 再写入配置
+//	disable <name>：停用，并删除配置中的 api_key
+//	install <name>：安装 provider 依赖的外部工具（如 bailian-cli）
 func manageProviders(cmd string, args []string) error {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	configPath := fs.String("config", config.DefaultPath(), "配置文件路径")
+	keyStdin := fs.Bool("api-key-stdin", false, "从标准输入读取 API Key（仅 enable）")
 	fs.Parse(args)
 
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return fmt.Errorf("加载配置失败 %s: %w", *configPath, err)
+	}
+
 	if cmd == "providers" {
-		cfg, err := config.Load(*configPath)
-		if err != nil {
-			return fmt.Errorf("加载配置失败 %s: %w", *configPath, err)
-		}
 		type item struct {
-			Name    string `json:"name"`
-			Enabled bool   `json:"enabled"`
+			Name           string `json:"name"`
+			Enabled        bool   `json:"enabled"`
+			RequiresAPIKey bool   `json:"requires_api_key"`
+			Installable    bool   `json:"installable"`
 		}
 		var out []item
 		for _, name := range providers.Names() {
 			pc, ok := cfg.Providers[name]
-			out = append(out, item{Name: name, Enabled: ok && pc.IsEnabled()})
+			it := item{Name: name, Enabled: ok && pc.IsEnabled()}
+			if p, err := providers.New(name, providers.Options{DataDir: store.DefaultDir()}); err == nil {
+				k, ok := p.(providers.KeyRequired)
+				it.RequiresAPIKey = ok && k.RequiresAPIKey()
+				_, it.Installable = p.(providers.Installer)
+			}
+			out = append(out, it)
 		}
 		return json.NewEncoder(os.Stdout).Encode(out)
 	}
@@ -223,7 +246,63 @@ func manageProviders(cmd string, args []string) error {
 	if !slices.Contains(providers.Names(), name) {
 		return fmt.Errorf("用法: liquoten %s [-config 路径] <provider>（可选: %s）", cmd, strings.Join(providers.Names(), ", "))
 	}
-	return config.SetEnabled(*configPath, name, cmd == "enable")
+	pc := cfg.Providers[name]
+	opts := providers.Options{APIKey: pc.APIKey, Command: pc.Command, Timeout: pc.Timeout, DataDir: store.DefaultDir()}
+	ctx := context.Background()
+
+	switch cmd {
+	case "install":
+		p, err := providers.New(name, opts)
+		if err != nil {
+			return err
+		}
+		in, ok := p.(providers.Installer)
+		if !ok {
+			return fmt.Errorf("provider %q 不需要安装依赖", name)
+		}
+		return in.Install(ctx)
+
+	case "disable":
+		off := false
+		return config.SetProvider(*configPath, name, config.ProviderUpdate{Enabled: &off, Delete: []string{"api_key"}})
+	}
+
+	on := true
+	update := config.ProviderUpdate{Enabled: &on}
+	if *keyStdin {
+		raw, err := io.ReadAll(io.LimitReader(os.Stdin, 64<<10))
+		if err != nil {
+			return err
+		}
+		key := strings.TrimSpace(string(raw))
+		opts.APIKey = key
+		update.APIKey = &key
+	}
+	p, err := providers.New(name, opts)
+	if err != nil {
+		return err
+	}
+	if pf, ok := p.(providers.Preflighter); ok {
+		path, err := pf.Preflight(ctx)
+		if err != nil {
+			return err
+		}
+		if path != pc.Command {
+			update.Command = &path
+		}
+	}
+	if k, ok := p.(providers.KeyRequired); ok && k.RequiresAPIKey() {
+		if opts.APIKey == "" {
+			return errors.New("请填写 API Key")
+		}
+		qctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		_, err := p.Query(qctx)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
+	return config.SetProvider(*configPath, name, update)
 }
 
 func login(args []string) error {

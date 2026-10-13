@@ -133,6 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         case "bailian": return "百炼"
         case "claudecode": return "Claude"
         case "codex": return "Codex"
+        case "qoder": return "Qoder"
+        case "qodercn": return "Qoder CN"
         default: return provider
         }
     }
@@ -141,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         ("bailian", "打开百炼控制台", "https://bailian.console.aliyun.com/"),
         ("claudecode", "打开 Claude 用量页", "https://claude.ai/settings/usage"),
         ("codex", "打开 Codex 用量页", "https://chatgpt.com/codex/settings/usage"),
+        ("qoder", "打开 Qoder 官网", "https://qoder.com"),
+        ("qodercn", "打开 Qoder CN 官网", "https://qoder.com.cn"),
     ]
 
     static func shortName(_ name: String) -> String {
@@ -205,21 +209,113 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
+    // 开关服务：需要 API Key 的先弹窗输入并验证；依赖工具缺失的提示安装，装不上则保持关闭。
     private func setEnabled(_ name: String, _ enabled: Bool) {
         guard model.togglingProvider == nil else { return }
-        model.togglingProvider = name
-        daemon.setEnabled(provider: name, enabled: enabled) { [weak self] failure in
-            guard let self else { return }
-            self.model.togglingProvider = nil
-            if let failure {
-                let alert = NSAlert()
-                alert.messageText = "修改服务失败"
-                alert.informativeText = failure
-                alert.runModal()
+        guard enabled else {
+            begin(name, "正在关闭…")
+            daemon.disable(provider: name) { [weak self] failure in
+                self?.finish(failure.map { ("关闭服务失败", $0) })
             }
-            self.loadProviders()
-            self.forceRefresh()
+            return
         }
+        let info = model.providers.first { $0.name == name }
+        var apiKey: String?
+        if info?.requiresApiKey == true {
+            guard let key = Self.promptAPIKey(for: name) else { return }
+            apiKey = key
+        }
+        begin(name, apiKey == nil ? "正在检查…" : "正在验证 API Key…")
+        daemon.enable(provider: name, apiKey: apiKey) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .ok:
+                self.finish(nil)
+            case .failed(let msg):
+                self.finish((apiKey == nil ? "开启服务失败" : "API Key 验证失败", msg))
+            case .notInstalled(let msg):
+                guard info?.installable == true, Self.confirmInstall(name, msg) else {
+                    return self.finish(nil, reload: false)
+                }
+                self.model.busyText = "正在安装，可能需要一两分钟…"
+                self.daemon.install(provider: name) { failure in
+                    if let failure {
+                        return self.finish(("安装失败，服务未开启", failure + "\n\n也可以在终端手动执行 npm install -g bailian-cli，装好后再打开开关。"))
+                    }
+                    self.model.busyText = "安装完成，正在开启…"
+                    self.daemon.enable(provider: name, apiKey: nil) { result in
+                        switch result {
+                        case .ok: self.finish(nil)
+                        case .failed(let m), .notInstalled(let m): self.finish(("开启服务失败", m))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func begin(_ name: String, _ text: String) {
+        model.togglingProvider = name
+        model.busyText = text
+    }
+
+    private func finish(_ failure: (title: String, message: String)?, reload: Bool = true) {
+        model.togglingProvider = nil
+        model.busyText = nil
+        if let failure {
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = failure.title
+            alert.informativeText = failure.message
+            alert.runModal()
+        }
+        loadProviders()
+        if reload { forceRefresh() }
+    }
+
+    static func keyURL(_ provider: String) -> URL? {
+        switch provider {
+        case "qoder": return URL(string: "https://qoder.com/account/integrations")
+        case "qodercn": return URL(string: "https://qoder.com.cn/account/integrations")
+        default: return nil
+        }
+    }
+
+    // 弹窗输入 API Key；取消返回 nil。“获取 API Key”打开令牌页后继续停留在弹窗。
+    static func promptAPIKey(for provider: String) -> String? {
+        NSApp.activate(ignoringOtherApps: true)
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        field.placeholderString = "粘贴个人访问令牌"
+        while true {
+            let alert = NSAlert()
+            alert.messageText = "开启\(displayName(provider))需要 API Key"
+            alert.informativeText = "在\(displayName(provider))账号的「集成」页面生成个人访问令牌（Personal Access Token），粘贴到下面。Key 只保存在本机配置文件里，关闭服务时会删除。"
+            alert.accessoryView = field
+            alert.addButton(withTitle: "开启")
+            alert.addButton(withTitle: "取消")
+            if keyURL(provider) != nil { alert.addButton(withTitle: "获取 API Key") }
+            alert.window.initialFirstResponder = field
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !key.isEmpty { return key }
+            case .alertThirdButtonReturn:
+                if let url = keyURL(provider) { NSWorkspace.shared.open(url) }
+            default:
+                return nil
+            }
+        }
+    }
+
+    static func confirmInstall(_ provider: String, _ detail: String) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "需要先安装百炼命令行工具 bl"
+        alert.informativeText = "Liquoten 通过阿里云官方的 bailian-cli 查询百炼用量，本机还没有安装。\n\n点「安装」会执行 npm install -g bailian-cli（需要 Node.js 22.12 或更高版本）。装不上时服务不会开启。"
+        alert.addButton(withTitle: "安装")
+        alert.addButton(withTitle: "取消")
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func forceRefresh() {

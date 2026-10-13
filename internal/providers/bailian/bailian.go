@@ -11,9 +11,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -111,10 +113,95 @@ func (p *Provider) Login(ctx context.Context, site string) error {
 	return nil
 }
 
+// npm 全局目录常见位置；从 Finder 启动的 App 的 PATH 里没有这些目录。
+var searchDirs = func() []string {
+	home, _ := os.UserHomeDir()
+	return []string{
+		"/opt/homebrew/bin",
+		"/usr/local/bin",
+		filepath.Join(home, ".npm-global", "bin"),
+		filepath.Join(home, ".volta", "bin"),
+		filepath.Join(home, ".local", "bin"),
+	}
+}
+
+// lookup 按 PATH 与常见安装目录查找可执行文件，返回绝对路径。
+func lookup(name string) (string, bool) {
+	if filepath.IsAbs(name) {
+		if st, err := os.Stat(name); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+			return name, true
+		}
+		return "", false
+	}
+	if path, err := exec.LookPath(name); err == nil {
+		if abs, err := filepath.Abs(path); err == nil {
+			return abs, true
+		}
+	}
+	for _, dir := range searchDirs() {
+		if path, ok := lookup(filepath.Join(dir, name)); ok {
+			return path, true
+		}
+	}
+	return "", false
+}
+
+// Preflight 检查 bl 是否已安装，返回其绝对路径。
+func (p *Provider) Preflight(ctx context.Context) (string, error) {
+	path, ok := lookup(p.command)
+	if !ok && p.command != "bl" {
+		path, ok = lookup("bl")
+	}
+	if !ok {
+		return "", fmt.Errorf("没有找到百炼命令行工具 bl：%w", providers.ErrNotInstalled)
+	}
+	return path, nil
+}
+
+// Install 用 npm 全局安装 bailian-cli（需要 Node.js ≥ 22.12）。
+func (p *Provider) Install(ctx context.Context) error {
+	npm, ok := lookup("npm")
+	if !ok {
+		return errors.New("没有找到 npm。请先安装 Node.js 22.12 或更高版本（https://nodejs.org，或在终端执行 brew install node），再重试")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, npm, "install", "-g", "bailian-cli")
+	cmd.Env = withDirInPath(os.Environ(), filepath.Dir(npm))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if len(msg) > 600 {
+			msg = "…" + msg[len(msg)-600:]
+		}
+		return fmt.Errorf("npm install -g bailian-cli 失败: %v\n%s", err, msg)
+	}
+	if _, ok := lookup("bl"); !ok {
+		return errors.New("bailian-cli 已安装，但仍找不到 bl 命令，请在终端执行 npm prefix -g 检查全局安装目录")
+	}
+	return nil
+}
+
+// withDirInPath 把 dir 放到 PATH 最前：bl 与 npm 都是 `#!/usr/bin/env node` 脚本，
+// 需要在 PATH 中找到与之同目录的 node。
+func withDirInPath(env []string, dir string) []string {
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + dir + string(os.PathListSeparator) + strings.TrimPrefix(kv, "PATH=")
+			return env
+		}
+	}
+	return append(env, "PATH="+dir)
+}
+
 // run 执行 CLI 并返回 stdout；失败时把 stderr 带进错误信息。
 func (p *Provider) run(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, p.command, args...)
 	cmd.Env = os.Environ()
+	if path, ok := lookup(p.command); ok {
+		cmd.Path = path
+		cmd.Env = withDirInPath(cmd.Env, filepath.Dir(path))
+	}
 	if p.apiKey != "" {
 		cmd.Env = append(cmd.Env, "DASHSCOPE_API_KEY="+p.apiKey)
 	}

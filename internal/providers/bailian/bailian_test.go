@@ -2,8 +2,10 @@ package bailian
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -167,4 +169,47 @@ func readFile(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+func TestPreflight(t *testing.T) {
+	orig := searchDirs
+	t.Cleanup(func() { searchDirs = orig })
+	searchDirs = func() []string { return nil }
+	t.Setenv("PATH", t.TempDir())
+
+	fake, err := filepath.Abs(filepath.Join("testdata", "fake-bl.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := New(providers.Options{Command: fake}).Preflight(context.Background())
+	if err != nil || got != fake {
+		t.Fatalf("Preflight = %q, %v; want %q", got, err, fake)
+	}
+
+	_, err = New(providers.Options{}).Preflight(context.Background())
+	if !errors.Is(err, providers.ErrNotInstalled) {
+		t.Fatalf("bl 缺失时应返回 ErrNotInstalled，got %v", err)
+	}
+
+	dir := t.TempDir()
+	bl := filepath.Join(dir, "bl")
+	if err := os.WriteFile(bl, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	searchDirs = func() []string { return []string{dir} }
+	got, err = New(providers.Options{}).Preflight(context.Background())
+	if err != nil || got != bl {
+		t.Fatalf("应在常见安装目录找到 bl: %q, %v", got, err)
+	}
+}
+
+func TestInstallWithoutNpm(t *testing.T) {
+	orig := searchDirs
+	t.Cleanup(func() { searchDirs = orig })
+	searchDirs = func() []string { return nil }
+	t.Setenv("PATH", t.TempDir())
+	err := New(providers.Options{}).Install(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "Node.js") {
+		t.Fatalf("没有 npm 时应提示安装 Node.js，got %v", err)
+	}
 }

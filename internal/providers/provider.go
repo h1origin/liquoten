@@ -7,6 +7,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -41,6 +42,25 @@ type Scheduled interface {
 
 type Authenticator interface {
 	Login(ctx context.Context, site string) error
+}
+
+// KeyRequired 由必须填写 API Key 才能查询的 provider 实现。
+type KeyRequired interface {
+	RequiresAPIKey() bool
+}
+
+// ErrNotInstalled 表示 provider 依赖的外部工具未安装。
+var ErrNotInstalled = errors.New("依赖工具未安装")
+
+// Preflighter 在启用前检查依赖；返回依赖的实际路径（写入配置），
+// 依赖缺失时返回包装了 ErrNotInstalled 的错误。
+type Preflighter interface {
+	Preflight(ctx context.Context) (command string, err error)
+}
+
+// Installer 安装 provider 依赖的外部工具。
+type Installer interface {
+	Install(ctx context.Context) error
 }
 
 // Options 由 config 层填充后传给各 provider 的工厂函数。

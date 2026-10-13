@@ -88,4 +88,20 @@ enum HistoryReader {
 struct ProviderInfo: Decodable {
     let name: String
     let enabled: Bool
+    var requiresApiKey = false
+    var installable = false
+
+    private enum CodingKeys: String, CodingKey {
+        case name, enabled
+        case requiresApiKey = "requires_api_key"
+        case installable
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        requiresApiKey = try c.decodeIfPresent(Bool.self, forKey: .requiresApiKey) ?? false
+        installable = try c.decodeIfPresent(Bool.self, forKey: .installable) ?? false
+    }
 }

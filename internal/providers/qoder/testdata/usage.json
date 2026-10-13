@@ -1,0 +1,10 @@
+{
+  "userId": "u-123",
+  "userType": "pro",
+  "userQuota": {"total": 2000, "used": 500, "remaining": 1500, "percentage": 25, "unit": "credits"},
+  "addOnQuota": {"total": 1000, "used": 200, "remaining": 800, "unit": "credits"},
+  "orgResourcePackage": null,
+  "totalUsagePercentage": 23.3,
+  "isQuotaExceeded": false,
+  "expiresAt": 1793462400000
+}

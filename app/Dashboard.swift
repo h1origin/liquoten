@@ -11,6 +11,7 @@ final class DashboardModel: ObservableObject {
     @Published var providersLoaded = false
     @Published var showingServices = false
     @Published var togglingProvider: String?
+    @Published var busyText: String?
 
     var onRefresh: () -> Void = {}
     var onLogin: (String) -> Void = { _ in }
@@ -127,6 +128,7 @@ enum Style {
         case "bailian": return "cloud.fill"
         case "claudecode": return "sparkle"
         case "codex": return "chevron.left.forwardslash.chevron.right"
+        case "qoder", "qodercn": return "q.circle.fill"
         default: return "circle.grid.2x2"
         }
     }
@@ -136,6 +138,8 @@ enum Style {
         case "bailian": return "阿里云百炼 Token Plan"
         case "claudecode": return "Claude Code 订阅"
         case "codex": return "ChatGPT Codex 订阅"
+        case "qoder": return "Qoder（国际版）"
+        case "qodercn": return "Qoder CN（国内版）"
         default: return provider
         }
     }
@@ -154,6 +158,8 @@ enum Style {
         case "bailian": return "用阿里云官方命令行工具 bl 查询 Token Plan 用量。需要先安装 bailian-cli，并登录百炼控制台。"
         case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
         case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额。只在使用 Codex 时更新，无需额外配置。"
+        case "qoder": return "用个人访问令牌查询 qoder.com 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key。"
+        case "qodercn": return "用个人访问令牌查询 qoder.com.cn 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key。"
         default: return ""
         }
     }
@@ -638,6 +644,9 @@ struct ServiceRow: View {
                         .controlSize(.small)
                         .disabled(model.togglingProvider != nil)
                 }
+            }
+            if model.togglingProvider == info.name, let text = model.busyText {
+                Text(text).font(.caption).foregroundStyle(.secondary)
             }
             if info.enabled {
                 status
