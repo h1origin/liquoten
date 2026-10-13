@@ -802,8 +802,10 @@ struct DayBars: View {
                     ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
                         VStack(spacing: 1) {
                             if !compact {
-                                Text(slot.delta.map { $0 >= 0.5 ? "\(Int($0.rounded()))" : "" } ?? (slot.isFuture ? "" : "?"))
+                                Text(slot.delta.map { $0 >= 0.5 ? "\(Int($0.rounded()))%" : "" } ?? (slot.isFuture ? "" : "?"))
                                     .font(.system(size: 8))
+                                    .lineLimit(1)
+                                    .fixedSize()
                                     .foregroundStyle(.secondary)
                                     .frame(height: valueH)
                             }
