@@ -25,6 +25,19 @@ daemon 由 App 作为子进程拉起（意外退出 5 秒后自动重启）；Ap
 
 ## 安装
 
+### 方式一：下载 dmg（推荐）
+
+到仓库的 [Releases](https://github.com/hi-origin/liquoten/releases) 页面下载最新的 `Liquoten-x.y.z.dmg`，双击打开后把 Liquoten 拖进“应用程序”。支持 Apple 芯片与 Intel 芯片，需要 macOS 13 或更高版本。
+
+dmg 没有经过苹果签名公证，第一次打开会提示“无法验证开发者”，任选一种方式放行：
+
+- 打开“系统设置 → 隐私与安全性”，在页面下方找到 Liquoten，点“仍要打开”
+- 或在终端执行 `xattr -dr com.apple.quarantine /Applications/Liquoten.app`
+
+打开后点菜单栏的水滴图标 → “服务”，选择要监控的服务。监控百炼还需要安装官方 CLI（见下方第 1 步）。
+
+### 方式二：从源码构建
+
 前置：Go ≥ 1.21（`brew install go`，go.mod 会自动拉取 1.27 工具链）、Node ≥ 22.12、Xcode Command Line Tools（`xcode-select --install`，编译 Swift 需要）。
 
 ```bash
@@ -36,8 +49,7 @@ bl auth login --console                  # 浏览器登录控制台（国际站�
 mkdir -p ~/.config/liquoten
 cp config.example.toml ~/.config/liquoten/config.toml
 
-# 3. 构建并安装 App
-cd ~/code/liquoten-cred
+# 3. 构建并安装 App（在仓库根目录执行）
 ./app/build.sh
 mv build/Liquoten.app /Applications/      # 建议放 /Applications（"开机自动启动"依赖 bundle 路径稳定）
 
@@ -45,7 +57,17 @@ mv build/Liquoten.app /Applications/      # 建议放 /Applications（"开机自
 open /Applications/Liquoten.app
 ```
 
-首次启动后系统会请求通知权限，允许即可。菜单栏点开下拉菜单可勾选"开机自动启动"（SMAppService 登录项，App 自带的开关，无需手写 plist）。
+首次启动后系统会请求通知权限，允许即可。面板右下角齿轮菜单可勾选"开机自动启动"（SMAppService 登录项，App 自带的开关，无需手写 plist）。
+
+### 发版
+
+推送 `v` 开头的标签即自动发版：GitHub Actions（`.github/workflows/release.yml`）在 macOS 上跑测试，用 `app/package-dmg.sh` 打出通用版本（arm64 + x86_64）的 dmg，并创建同名 Release 附上 dmg 与安装说明。
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+本地预览 dmg：`./app/package-dmg.sh 1.0.0` → `build/Liquoten-1.0.0.dmg`。
 
 注意：App 从 Finder 启动时 PATH 里没有 `bl`（npm 全局目录不在其中）。如果 daemon 报 `bl: command not found`，在 `config.toml` 里写死绝对路径：
 
@@ -110,7 +132,7 @@ daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-ca
 ```bash
 go test ./... && go vet ./... && test -z "$(gofmt -l .)"   # 单测 + 静态检查
 
-~/code/liquoten-cred/build/Liquoten.app/Contents/Resources/liquoten -once   # 跑一轮 daemon
+build/Liquoten.app/Contents/Resources/liquoten -once   # 跑一轮 daemon
 cat ~/.cache/liquoten/state.json                            # 与控制台百分比对比
 ```
 
@@ -140,7 +162,9 @@ cat ~/.cache/liquoten/state.json                            # 与控制台百分
 
 ```
 app/                    Liquoten.app 源码（Swift：菜单栏 + 通知消费 + daemon 看门狗）
-  build.sh              打包脚本（swiftc + go build，产出 build/Liquoten.app）
+  build.sh              打包脚本（swiftc + go build，产出 build/Liquoten.app；ARCHS/VERSION 可选）
+  package-dmg.sh        发版用：通用版本 + dmg
+.github/workflows/      release.yml：推 v* 标签自动打 dmg 并发布 Release
 cmd/liquoten/           daemon 入口（轮询循环、由 App 或 launchd 常驻）
 internal/config/       配置加载（TOML + 环境变量）
 internal/providers/    Provider 接口 + 注册表
