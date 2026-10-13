@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onOpenDataDir = { NSWorkspace.shared.open(URL(fileURLWithPath: DaemonManager.cacheDir)) }
         model.onToggleLoginItem = { [weak self] in self?.toggleLoginItem() }
         model.onQuit = { NSApp.terminate(nil) }
+        model.onSetEnabled = { [weak self] name, enabled in self?.setEnabled(name, enabled) }
 
         let host = NSHostingController(rootView: DashboardView(model: model))
         host.sizingOptions = [.preferredContentSize]
@@ -35,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notifier.requestAuthorization()
         daemon.start()
         refresh()
+        loadProviders()
 
         // 60 秒刷新一次菜单栏与通知；daemon 自己按 15 分钟节奏轮询。
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -81,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         refresh()
+        loadProviders()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
@@ -172,6 +175,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 self.forceRefresh()
             }
+        }
+    }
+
+    private func loadProviders() {
+        daemon.listProviders { [weak self] list in
+            guard let self else { return }
+            self.model.providers = list
+            self.model.providersLoaded = true
+        }
+    }
+
+    private func setEnabled(_ name: String, _ enabled: Bool) {
+        guard model.togglingProvider == nil else { return }
+        model.togglingProvider = name
+        daemon.setEnabled(provider: name, enabled: enabled) { [weak self] failure in
+            guard let self else { return }
+            self.model.togglingProvider = nil
+            if let failure {
+                let alert = NSAlert()
+                alert.messageText = "修改服务失败"
+                alert.informativeText = failure
+                alert.runModal()
+            }
+            self.loadProviders()
+            self.forceRefresh()
         }
     }
 

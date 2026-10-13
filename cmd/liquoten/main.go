@@ -7,12 +7,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +30,13 @@ import (
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "statusline" {
 		statusline()
+		return
+	}
+	if len(os.Args) > 1 && (os.Args[1] == "providers" || os.Args[1] == "enable" || os.Args[1] == "disable") {
+		if err := manageProviders(os.Args[1], os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 	if len(os.Args) > 1 && os.Args[1] == "login" {
@@ -70,7 +79,16 @@ func main() {
 
 	provs := buildProviders(cfg, *cacheDir)
 	if len(provs) == 0 {
-		log.Fatal("没有启用的 provider，请检查配置文件")
+		log.Printf("没有启用的 provider，可在 Liquoten 面板的“服务”页或配置文件 %s 中选择", *configPath)
+		if err := st.WriteState([]providers.Balance{}); err != nil {
+			log.Printf("写缓存失败: %v", err)
+		}
+		if *once {
+			return
+		}
+		for {
+			time.Sleep(time.Hour)
+		}
 	}
 	names := make([]string, 0, len(provs))
 	for _, p := range provs {
@@ -128,6 +146,35 @@ func statusline() {
 		fmt.Fprintf(os.Stderr, "liquoten statusline: %v\n", err)
 	}
 	fmt.Println(claudecode.StatusLine(in))
+}
+
+func manageProviders(cmd string, args []string) error {
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	configPath := fs.String("config", config.DefaultPath(), "配置文件路径")
+	fs.Parse(args)
+
+	if cmd == "providers" {
+		cfg, err := config.Load(*configPath)
+		if err != nil {
+			return fmt.Errorf("加载配置失败 %s: %w", *configPath, err)
+		}
+		type item struct {
+			Name    string `json:"name"`
+			Enabled bool   `json:"enabled"`
+		}
+		var out []item
+		for _, name := range providers.Names() {
+			pc, ok := cfg.Providers[name]
+			out = append(out, item{Name: name, Enabled: ok && pc.IsEnabled()})
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
+	}
+
+	name := fs.Arg(0)
+	if !slices.Contains(providers.Names(), name) {
+		return fmt.Errorf("用法: liquoten %s [-config 路径] <provider>（可选: %s）", cmd, strings.Join(providers.Names(), ", "))
+	}
+	return config.SetEnabled(*configPath, name, cmd == "enable")
 }
 
 func login(args []string) error {

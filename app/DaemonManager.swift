@@ -36,30 +36,48 @@ final class DaemonManager {
     }
 
     func login(provider: String, site: String, completion: @escaping (String?) -> Void) {
+        run(["login", "-config", Self.configPath, "-site", site, provider]) { _, failure in completion(failure) }
+    }
+
+    func listProviders(completion: @escaping ([ProviderInfo]) -> Void) {
+        run(["providers", "-config", Self.configPath]) { output, failure in
+            guard failure == nil,
+                  let list = try? JSONDecoder().decode([ProviderInfo].self, from: Data(output.utf8)) else {
+                completion([])
+                return
+            }
+            completion(list)
+        }
+    }
+
+    func setEnabled(provider: String, enabled: Bool, completion: @escaping (String?) -> Void) {
+        run([enabled ? "enable" : "disable", "-config", Self.configPath, provider]) { _, failure in completion(failure) }
+    }
+
+    private func run(_ args: [String], completion: @escaping (String, String?) -> Void) {
         guard let bin = binaryURL, !isMissing else {
-            completion("daemon 缺失，请重新安装 Liquoten.app")
+            completion("", "daemon 缺失，请重新安装 Liquoten.app")
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
             let p = Process()
             p.executableURL = bin
-            p.arguments = ["login", "-config", Self.configPath, "-site", site, provider]
+            p.arguments = args
             let pipe = Pipe()
             p.standardOutput = pipe
             p.standardError = pipe
+            var output = ""
             var failure: String?
             do {
                 try p.run()
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 p.waitUntilExit()
-                if p.terminationStatus != 0 {
-                    failure = String(decoding: data, as: UTF8.self)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                }
+                output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+                if p.terminationStatus != 0 { failure = output }
             } catch {
                 failure = error.localizedDescription
             }
-            DispatchQueue.main.async { completion(failure) }
+            DispatchQueue.main.async { completion(output, failure) }
         }
     }
 

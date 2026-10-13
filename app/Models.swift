@@ -84,3 +84,8 @@ enum HistoryReader {
         "\(provider)/\(section)"
     }
 }
+
+struct ProviderInfo: Decodable {
+    let name: String
+    let enabled: Bool
+}

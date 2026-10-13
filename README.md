@@ -80,7 +80,8 @@ Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used
 - 顶部：所有额度中最高已用比例 + 状态（充足 / 注意 / 紧张）、服务数、更新时间、出错数
 - 按服务分组的额度卡片：已用百分比、历史走势（5 小时额度看近 24 小时，周额度看近 7 天，月度额度看近 30 天，数据来自 history.jsonl）、用量条、剩余比例、重置倒计时
 - 出错卡片：把错误翻译成中文提示；百炼未登录时直接给出"登录国内站 / 登录国际站"按钮
-- 底部：刷新（重启 daemon 立即查询）、登录百炼（国内站 / 国际站）、打开（控制台 / Claude 用量页 / 数据目录）、设置（开机自动启动、退出）
+- 底部：刷新（重启 daemon 立即查询）、服务、打开（控制台 / Claude 用量页 / 数据目录）、设置（开机自动启动、退出）
+- 服务页：列出所有已实现的服务，开关即写入配置文件并立即重新查询；百炼可在此登录国内站 / 国际站，Claude Code 可一键复制 statusLine 配置。新装时不启用任何服务，首次打开面板会引导去选择
 
 
 ## 通知
@@ -91,7 +92,7 @@ Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used
 
 ## 配置
 
-见 [config.example.toml](config.example.toml)。默认阈值：5 小时窗口 80%、周窗口 90%，升穿时发一次系统通知，回落后复位（下次升穿再告警）。百炼 Token Plan 用量查询依赖 `bl auth login --console` 的控制台登录态（API key 只用于模型调用，查不到用量）；`api_key` 字段仍会以 `DASHSCOPE_API_KEY` 传给 bl。
+见 [config.example.toml](config.example.toml)。默认不启用任何服务：在面板“服务”页打开开关，或在配置里写 `[providers.<name>]`（出现即启用，`enabled = false` 关闭）。默认阈值：5 小时窗口 80%、周窗口 90%，升穿时发一次系统通知，回落后复位（下次升穿再告警）。百炼 Token Plan 用量查询依赖 `bl auth login --console` 的控制台登录态（API key 只用于模型调用，查不到用量）；`api_key` 字段仍会以 `DASHSCOPE_API_KEY` 传给 bl。
 
 环境变量：
 
@@ -101,7 +102,7 @@ Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used
 | `LIQUOTEN_CONFIG` | 覆盖默认配置文件路径（`~/.config/liquoten/config.toml`） |
 | `LIQUOTEN_CACHE_DIR` | 覆盖默认缓存目录（`~/.cache/liquoten`） |
 
-daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。子命令 `liquoten login [-site domestic|international] bailian` 执行控制台登录（菜单"登录百炼"即调用它）。
+daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。子命令 `liquoten providers` 列出服务及启用状态（JSON），`liquoten enable|disable <provider>` 改写配置文件里的开关（面板“服务”页即调用它们）。子命令 `liquoten login [-site domestic|international] bailian` 执行控制台登录（菜单"登录百炼"即调用它）。
 
 ## 验证
 
@@ -118,7 +119,7 @@ cat ~/.cache/liquoten/state.json                            # 与控制台百分
 
 1. 新建 `internal/providers/<name>/<name>.go`，实现 `providers.Provider` 接口并在 `init()` 里 `providers.Register`
 2. 在 `cmd/liquoten/main.go` 里 `import _` 该包（注册入口）
-3. 配置里加 `[providers.<name>]` 与 `[thresholds.<name>]`
+3. 在 `internal/config/config.go` 的默认阈值里加 `[thresholds.<name>]`；注册后自动出现在面板“服务”页（名称、说明在 `app/Dashboard.swift` 的 `Style.providerTitle` / `providerDescription` 里补）
 
 各 provider 的余额语义不同，统一归一化为 `Section{Name, UsedPct, Remaining, ResetAt}`（无对应语义的字段置 -1）：
 

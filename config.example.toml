@@ -1,7 +1,8 @@
 # liquoten 示例配置。复制到 ~/.config/liquoten/config.toml 后按需修改。
 #
 # 说明：
-#   - 出现在 [providers.xxx] 里的 provider 默认启用，除非显式 enabled = false
+#   - 默认不启用任何 provider；出现在 [providers.xxx] 里的即启用，除非显式 enabled = false
+#   - 也可以在 Liquoten 面板的“服务”页开关，App 会改写本文件对应的 enabled 行
 #   - 百炼用量查询依赖 `bl auth login --console` 的控制台登录态（或在菜单里点"登录百炼"）；
 #     api_key 只会以 DASHSCOPE_API_KEY 传给 bl，查不到 Token Plan 用量
 #   - thresholds 按 provider -> section 名配置，升穿阈值发一次通知

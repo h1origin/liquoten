@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,8 +16,8 @@ func TestDefaults(t *testing.T) {
 	if cfg.PollInterval != DefaultPollInterval {
 		t.Fatalf("PollInterval = %v, want %v", cfg.PollInterval, DefaultPollInterval)
 	}
-	if !cfg.Providers["bailian"].IsEnabled() {
-		t.Fatal("bailian 默认应启用")
+	if len(cfg.Providers) != 0 {
+		t.Fatalf("默认不应启用任何 provider: %v", cfg.Providers)
 	}
 	if got := cfg.Thresholds["bailian"]["5-hour quota"]; got != 80 {
 		t.Fatalf("默认 5-hour 阈值 = %v, want 80", got)
@@ -90,8 +91,8 @@ func TestNewProviderEntryDefaultEnabled(t *testing.T) {
 	if !cfg.Providers["deepseek"].IsEnabled() {
 		t.Fatal("新增 provider 空条目应默认启用")
 	}
-	if !cfg.Providers["bailian"].IsEnabled() {
-		t.Fatal("未提及的 bailian 应保持默认启用")
+	if _, ok := cfg.Providers["bailian"]; ok {
+		t.Fatal("未提及的 bailian 不应出现")
 	}
 }
 
@@ -103,5 +104,72 @@ func TestInvalidTOML(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("非法 TOML 应报错")
+	}
+}
+
+func TestSetEnabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sub", "config.toml")
+
+	if err := SetEnabled(path, "claudecode", true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Providers["claudecode"].IsEnabled() {
+		t.Fatal("新建文件后 claudecode 应启用")
+	}
+
+	content := `poll_interval = "15m"
+
+[providers.bailian]
+command = "/opt/homebrew/bin/bl"
+# api_key = "sk-xxx"
+
+# [providers.claudecode]
+
+[thresholds.bailian]
+"5-hour quota" = 70.0
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetEnabled(path, "bailian", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetEnabled(path, "claudecode", true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Providers["bailian"].IsEnabled() {
+		t.Fatal("bailian 应被禁用")
+	}
+	if cfg.Providers["bailian"].Command != "/opt/homebrew/bin/bl" {
+		t.Fatalf("bailian command 丢失: %q", cfg.Providers["bailian"].Command)
+	}
+	if !cfg.Providers["claudecode"].IsEnabled() {
+		t.Fatal("claudecode 应启用")
+	}
+	if got := cfg.Thresholds["bailian"]["5-hour quota"]; got != 70 {
+		t.Fatalf("阈值被破坏: %v", got)
+	}
+
+	if err := SetEnabled(path, "bailian", true); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Count(text, "enabled = ") != 2 || !strings.Contains(text, "[providers.bailian]\nenabled = true\n") {
+		t.Fatalf("重复切换应原地改写 enabled 行:\n%s", text)
+	}
+	if !strings.Contains(text, "# api_key = \"sk-xxx\"") || !strings.Contains(text, "# [providers.claudecode]") {
+		t.Fatalf("注释应保留:\n%s", text)
 	}
 }

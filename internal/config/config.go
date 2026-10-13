@@ -2,7 +2,11 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -35,20 +39,22 @@ type Config struct {
 	Thresholds   map[string]map[string]float64 `toml:"thresholds"`
 }
 
-// Default 返回内置默认配置：百炼启用，5 小时窗口 80%、周窗口 90% 告警，
-// 通知写入 notifications.jsonl 由 Liquoten.app 投递。
+// Default 返回内置默认配置：不启用任何 provider（由用户在配置或 App 里选择），
+// 内置各 provider 的默认告警阈值，通知写入 notifications.jsonl 由 Liquoten.app 投递。
 func Default() Config {
 	return Config{
 		PollInterval: DefaultPollInterval,
 		Notify:       "app",
-		Providers: map[string]ProviderCfg{
-			"bailian": {Enabled: boolPtr(true)},
-		},
+		Providers:    map[string]ProviderCfg{},
 		Thresholds: map[string]map[string]float64{
 			"bailian": {
 				"5-hour quota":  80,
 				"1-week quota":  90,
 				"1-month quota": 90,
+			},
+			"claudecode": {
+				"5-hour quota": 80,
+				"1-week quota": 90,
 			},
 		},
 	}
@@ -116,4 +122,53 @@ func DefaultPath() string {
 	return home + "/.config/liquoten/config.toml"
 }
 
-func boolPtr(b bool) *bool { return &b }
+func SetEnabled(path, name string, enabled bool) error {
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	value := fmt.Sprintf("enabled = %t", enabled)
+	header := regexp.MustCompile(`^\s*\[\s*providers\.` + regexp.QuoteMeta(name) + `\s*\]\s*(#.*)?$`)
+	enabledLine := regexp.MustCompile(`^\s*enabled\s*=`)
+	table := regexp.MustCompile(`^\s*\[`)
+
+	text := strings.TrimRight(string(data), "\n")
+	lines := strings.Split(text, "\n")
+	if text == "" {
+		lines = nil
+	}
+	start := -1
+	for i, l := range lines {
+		if header.MatchString(l) {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, "[providers."+name+"]", value)
+	} else {
+		replaced := false
+		for i := start + 1; i < len(lines) && !table.MatchString(lines[i]); i++ {
+			if enabledLine.MatchString(lines[i]) {
+				lines[i] = value
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			lines = append(lines[:start+1], append([]string{value}, lines[start+1:]...)...)
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}

@@ -7,6 +7,10 @@ final class DashboardModel: ObservableObject {
     @Published var loginItemEnabled = false
     @Published var daemonMissing = false
     @Published var now = Date()
+    @Published var providers: [ProviderInfo] = []
+    @Published var providersLoaded = false
+    @Published var showingServices = false
+    @Published var togglingProvider: String?
 
     var onRefresh: () -> Void = {}
     var onLogin: (String) -> Void = { _ in }
@@ -14,6 +18,15 @@ final class DashboardModel: ObservableObject {
     var onOpenDataDir: () -> Void = {}
     var onToggleLoginItem: () -> Void = {}
     var onQuit: () -> Void = {}
+    var onSetEnabled: (String, Bool) -> Void = { _, _ in }
+
+    var noneEnabled: Bool {
+        providersLoaded && !providers.contains(where: \.enabled)
+    }
+
+    func balance(_ provider: String) -> BalanceState? {
+        balances.first { $0.provider == provider }
+    }
 
     var okSections: [SectionState] {
         balances.filter { $0.error?.isEmpty ?? true }.flatMap(\.sections).filter { $0.usedPct >= 0 }
@@ -41,9 +54,13 @@ struct DashboardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HeaderView(model: model)
-            content
-            FooterBar(model: model)
+            if model.showingServices {
+                ServicesView(model: model)
+            } else {
+                HeaderView(model: model)
+                content
+                FooterBar(model: model)
+            }
         }
         .padding(14)
         .frame(width: 380)
@@ -52,6 +69,17 @@ struct DashboardView: View {
     @ViewBuilder private var content: some View {
         if model.daemonMissing {
             NoticeCard(icon: "xmark.octagon", text: "daemon 缺失，请重新安装 Liquoten.app")
+        } else if model.noneEnabled {
+            Card {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.grid.2x2").foregroundStyle(.secondary)
+                    Text("还没有选择要监控的服务").font(.callout.weight(.medium))
+                }
+                Text("选好之后，这里会显示每个服务的额度用量。").font(.callout).foregroundStyle(.secondary)
+                Button("选择服务") { model.showingServices = true }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
         } else if model.balances.isEmpty {
             NoticeCard(icon: "hourglass", text: "等待首次查询…")
         } else {
@@ -106,6 +134,25 @@ enum Style {
         case "claudecode": return "Claude Code 订阅"
         default: return provider
         }
+    }
+
+    static func providerDescription(_ provider: String) -> String {
+        switch provider {
+        case "bailian": return "用阿里云官方命令行工具 bl 查询 Token Plan 用量。需要先安装 bailian-cli，并登录百炼控制台。"
+        case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
+        default: return ""
+        }
+    }
+
+    static func claudeStatusLineSnippet() -> String {
+        let path = Bundle.main.resourceURL?.appendingPathComponent("liquoten").path
+            ?? "/Applications/Liquoten.app/Contents/Resources/liquoten"
+        return """
+        "statusLine": {
+          "type": "command",
+          "command": "\(path) statusline"
+        }
+        """
     }
 
     static func historyWindow(_ section: String) -> TimeInterval {
@@ -191,7 +238,9 @@ struct HeaderView: View {
                     .foregroundStyle(tint)
                 Text(peak.map { "\(Int($0.rounded()))" } ?? "--")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                Text("%").font(.title3).foregroundStyle(.secondary)
+                if peak != nil {
+                    Text("%").font(.title3).foregroundStyle(.secondary)
+                }
                 Text(Style.status(peak)).font(.title3.weight(.medium)).foregroundStyle(tint)
             }
             HStack(spacing: 6) {
@@ -384,18 +433,10 @@ struct FooterBar: View {
             }
             .buttonStyle(.borderless)
 
-            if model.hasBailian {
-                Menu {
-                    Button("国内站") { model.onLogin("domestic") }
-                    Button("国际站") { model.onLogin("international") }
-                } label: {
-                    Label(model.loggingIn ? "登录中…" : "登录百炼", systemImage: "person.crop.circle.badge.checkmark")
-                }
-                .disabled(model.loggingIn)
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+            Button { model.showingServices = true } label: {
+                Label("服务", systemImage: "square.grid.2x2")
             }
+            .buttonStyle(.borderless)
 
             Menu {
                 ForEach(AppDelegate.consoles.filter { c in model.balances.contains { $0.provider == c.provider } }, id: \.provider) { c in
@@ -429,5 +470,128 @@ struct FooterBar: View {
         }
         .font(.callout)
         .padding(.top, 2)
+    }
+}
+
+struct ServicesView: View {
+    @ObservedObject var model: DashboardModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Button { model.showingServices = false } label: {
+                    Label("返回", systemImage: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                Spacer()
+                Text("选择要监控的服务").font(.headline)
+                Spacer()
+                Label("返回", systemImage: "chevron.left").hidden()
+            }
+            if !model.providersLoaded {
+                NoticeCard(icon: "hourglass", text: "正在读取服务列表…")
+            } else if model.providers.isEmpty {
+                NoticeCard(icon: "xmark.octagon", text: "读取服务列表失败，请重新安装 Liquoten.app")
+            }
+            ForEach(model.providers, id: \.name) { info in
+                ServiceRow(model: model, info: info)
+            }
+            Text("开关会写入配置文件 ~/.config/liquoten/config.toml，并立即重新查询。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+struct ServiceRow: View {
+    @ObservedObject var model: DashboardModel
+    let info: ProviderInfo
+    @State private var copied = false
+
+    var body: some View {
+        Card {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: Style.providerIcon(info.name))
+                    .font(.title3)
+                    .foregroundStyle(info.enabled ? Color.accentColor : .secondary)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Style.providerTitle(info.name)).font(.callout.weight(.semibold))
+                    Text(Style.providerDescription(info.name))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                if model.togglingProvider == info.name {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Toggle("", isOn: Binding(
+                        get: { info.enabled },
+                        set: { model.onSetEnabled(info.name, $0) }))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .disabled(model.togglingProvider != nil)
+                }
+            }
+            if info.enabled {
+                status
+                actions
+            }
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        if let b = model.balance(info.name) {
+            if let err = b.error, !err.isEmpty {
+                Label(Style.friendlyError(info.name, err), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Label("已连接" + (b.fetchedAt.map { " · 数据时间 " + $0.formatted(date: .omitted, time: .shortened) } ?? ""),
+                      systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+        } else {
+            Label("等待查询…", systemImage: "hourglass").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var actions: some View {
+        switch info.name {
+        case "bailian":
+            if model.loggingIn {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("等待浏览器完成登录…").font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                HStack {
+                    Button("登录国内站") { model.onLogin("domestic") }
+                    Button("登录国际站") { model.onLogin("international") }
+                }
+                .controlSize(.small)
+            }
+        case "claudecode":
+            VStack(alignment: .leading, spacing: 4) {
+                Button(copied ? "已复制" : "复制状态栏配置") {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(Style.claudeStatusLineSnippet(), forType: .string)
+                    copied = true
+                }
+                .controlSize(.small)
+                Text("粘贴到 ~/.claude/settings.json 里，然后在 Claude Code 里发一句话即可有数据。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        default:
+            EmptyView()
+        }
     }
 }
