@@ -50,6 +50,8 @@ func New(dir string) *Provider {
 // Name 返回注册表名称。
 func (p *Provider) Name() string { return Name }
 
+func (p *Provider) PollInterval() time.Duration { return time.Minute }
+
 // Query 读取快照；窗口已过重置时间则视为 0%。
 func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 	bal := providers.Balance{Provider: Name, FetchedAt: p.now()}

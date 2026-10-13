@@ -2,13 +2,14 @@ import AppKit
 import ServiceManagement
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let daemon = DaemonManager()
     private let notifier = NotificationConsumer()
     private let model = DashboardModel()
     private let popover = NSPopover()
     private var timer: Timer?
+    private var outsideClickMonitor: Any?
     private var balances: [BalanceState] = []
 
     // MARK: - 生命周期
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentViewController = host
         popover.behavior = .transient
         popover.animates = true
+        popover.delegate = self
 
         if let button = statusItem.button {
             button.target = self
@@ -87,6 +89,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.popover.performClose(nil)
+        }
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        if let m = outsideClickMonitor {
+            NSEvent.removeMonitor(m)
+            outsideClickMonitor = nil
+        }
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        popover.performClose(nil)
     }
 
     // MARK: - 文本

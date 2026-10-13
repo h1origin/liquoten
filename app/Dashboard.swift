@@ -294,21 +294,74 @@ struct SectionCard: View {
             .fixedSize()
             if !unlimited {
                 HStack(spacing: 4) {
-                    Text(Style.historyLabel(section.name))
+                    Text(chartLabel)
                     Spacer(minLength: 4)
                     if let reset = section.resetAt, reset > now {
-                        Text(Style.resetChip(reset, now: now) + " 重置")
+                        Text(resetLabel(reset) + " 重置")
                     }
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                Sparkline(points: points, window: Style.historyWindow(section.name), now: now, color: tint)
-                    .frame(height: 30)
+                chart
                 UsageBar(pct: section.usedPct, color: tint)
             }
             Text(footer).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
+    }
+
+    private var window: (start: Date, end: Date) {
+        let span: TimeInterval = section.name == "1-week quota" ? 7 * 86400 : 5 * 3600
+        if let reset = section.resetAt, reset > now {
+            return (reset.addingTimeInterval(-span), reset)
+        }
+        if section.name == "1-week quota" {
+            let today = Calendar.current.startOfDay(for: now)
+            let start = today.addingTimeInterval(-6 * 86400)
+            return (start, start.addingTimeInterval(span))
+        }
+        return (now.addingTimeInterval(-span), now)
+    }
+
+    private var chartLabel: String {
+        switch section.name {
+        case "5-hour quota":
+            return window.start.formatted(date: .omitted, time: .shortened) + " 开始"
+        case "1-week quota":
+            return "每天用量"
+        default:
+            return Style.historyLabel(section.name)
+        }
+    }
+
+    @ViewBuilder private var chart: some View {
+        let tint = Style.color(section.usedPct)
+        switch section.name {
+        case "5-hour quota":
+            MinuteLine(points: points, start: window.start, end: window.end, now: now,
+                       current: section.usedPct, color: tint)
+                .frame(height: 46)
+        case "1-week quota":
+            WeekBars(points: points, start: window.start, now: now, current: section.usedPct, color: tint)
+                .frame(height: 46)
+        default:
+            Sparkline(points: points, window: Style.historyWindow(section.name), now: now, color: tint)
+                .frame(height: 30)
+        }
+    }
+
+    private func resetLabel(_ reset: Date) -> String {
+        let f = DateFormatter()
+        switch section.name {
+        case "5-hour quota":
+            f.dateFormat = "HH:mm"
+        case "1-week quota":
+            f.locale = Locale(identifier: "zh_CN")
+            f.dateFormat = "EEE HH:mm"
+        default:
+            return Style.resetChip(reset, now: now)
+        }
+        return f.string(from: reset)
     }
 
     private var footer: String {
@@ -608,6 +661,150 @@ struct ServiceRow: View {
             }
         default:
             EmptyView()
+        }
+    }
+}
+
+struct MinuteLine: View {
+    let points: [HistoryPoint]
+    let start: Date
+    let end: Date
+    let now: Date
+    let current: Double
+    let color: Color
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height
+            let span = max(end.timeIntervalSince(start), 60)
+            let inWindow = points.filter { $0.time > start && $0.time <= now }
+            let peak = max(current, inWindow.map(\.usedPct).max() ?? 0)
+            let top = peak >= 80 ? 100 : max(20, (peak * 1.2 / 20).rounded(.up) * 20)
+            let x = { (t: Date) -> CGFloat in w * CGFloat(min(max(t.timeIntervalSince(start) / span, 0), 1)) }
+            let y = { (v: Double) -> CGFloat in h - 1 - (h - 2) * CGFloat(min(max(v, 0), top) / top) }
+            let steps: [CGPoint] = {
+                var out = [CGPoint(x: x(start), y: y(0))]
+                var last = 0.0
+                for p in inWindow {
+                    out.append(CGPoint(x: x(p.time), y: y(last)))
+                    out.append(CGPoint(x: x(p.time), y: y(p.usedPct)))
+                    last = p.usedPct
+                }
+                out.append(CGPoint(x: x(now), y: y(last)))
+                out.append(CGPoint(x: x(now), y: y(current)))
+                return out
+            }()
+            ZStack(alignment: .topLeading) {
+                ForEach(1..<Int(span / 3600) + 1, id: \.self) { k in
+                    let tx = x(start.addingTimeInterval(Double(k) * 3600))
+                    Path { p in
+                        p.move(to: CGPoint(x: tx, y: 0))
+                        p.addLine(to: CGPoint(x: tx, y: h))
+                    }
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                Path { p in
+                    p.move(to: CGPoint(x: x(now), y: y(0)))
+                    p.addLine(to: CGPoint(x: w, y: y(0)))
+                }
+                .stroke(Color.primary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                Path { p in
+                    p.move(to: CGPoint(x: steps[0].x, y: h))
+                    steps.forEach { p.addLine(to: $0) }
+                    p.addLine(to: CGPoint(x: steps[steps.count - 1].x, y: h))
+                    p.closeSubpath()
+                }
+                .fill(LinearGradient(colors: [color.opacity(0.35), color.opacity(0.03)], startPoint: .top, endPoint: .bottom))
+                Path { p in
+                    p.move(to: steps[0])
+                    steps.dropFirst().forEach { p.addLine(to: $0) }
+                }
+                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+                Circle().fill(color).frame(width: 5, height: 5)
+                    .position(x: x(now), y: y(current))
+                Text("\(Int(top))%").font(.system(size: 8)).foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+struct WeekBars: View {
+    let points: [HistoryPoint]
+    let start: Date
+    let now: Date
+    let current: Double
+    let color: Color
+
+    private struct Slot {
+        let label: String
+        let isToday: Bool
+        let isFuture: Bool
+        let delta: Double?
+    }
+
+    private var slots: [Slot] {
+        let names = ["日", "一", "二", "三", "四", "五", "六"]
+        let cal = Calendar.current
+        let hasBefore = points.contains { $0.time < start }
+        var ends: [Double?] = []
+        var out: [Slot] = []
+        for i in 0..<7 {
+            let s = start.addingTimeInterval(Double(i) * 86400)
+            let e = s.addingTimeInterval(86400)
+            let label = names[cal.component(.weekday, from: s) - 1]
+            if s > now {
+                ends.append(nil)
+                out.append(Slot(label: label, isToday: false, isFuture: true, delta: nil))
+                continue
+            }
+            let isToday = e > now
+            var end: Double?
+            if isToday {
+                end = current
+            } else if let p = points.last(where: { $0.time >= start && $0.time < e }) {
+                end = p.usedPct
+            } else if hasBefore {
+                end = 0
+            }
+            let base: Double? = i == 0 ? 0 : ends[i - 1]
+            ends.append(end)
+            var delta: Double?
+            if let end, let base { delta = max(0, end - base) }
+            out.append(Slot(label: label, isToday: isToday, isFuture: false, delta: delta))
+        }
+        return out
+    }
+
+    var body: some View {
+        let slots = self.slots
+        let peak = max(1, slots.compactMap(\.delta).max() ?? 1)
+        GeometryReader { geo in
+            let labelH: CGFloat = 11, valueH: CGFloat = 10
+            let barArea = geo.size.height - labelH - valueH
+            HStack(alignment: .bottom, spacing: 4) {
+                ForEach(Array(slots.enumerated()), id: \.offset) { _, slot in
+                    VStack(spacing: 1) {
+                        Text(slot.delta.map { $0 >= 0.5 ? "\(Int($0.rounded()))" : "" } ?? (slot.isFuture ? "" : "?"))
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .frame(height: valueH)
+                        ZStack(alignment: .bottom) {
+                            RoundedRectangle(cornerRadius: 2).fill(Color.primary.opacity(0.06))
+                            if let d = slot.delta, d > 0 {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(color.opacity(slot.isToday ? 1 : 0.55))
+                                    .frame(height: max(2, barArea * CGFloat(d / peak)))
+                            }
+                        }
+                        .frame(height: barArea)
+                        Text(slot.label)
+                            .font(.system(size: 9, weight: slot.isToday ? .bold : .regular))
+                            .foregroundStyle(slot.isToday ? .primary : .secondary)
+                            .frame(height: labelH)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
         }
     }
 }

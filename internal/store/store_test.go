@@ -57,12 +57,44 @@ func TestReadStateMissing(t *testing.T) {
 func TestAppendHistory(t *testing.T) {
 	dir := t.TempDir()
 	s := New(dir)
-	for i := 0; i < 3; i++ {
-		if err := s.AppendHistory(sampleBalances()); err != nil {
+	base := sampleBalances()
+	t0 := base[0].FetchedAt
+
+	write := func(at time.Time, pct float64) {
+		t.Helper()
+		b := sampleBalances()
+		b[0].FetchedAt = at
+		b[0].Sections[0].UsedPct = pct
+		if err := s.AppendHistory(b); err != nil {
 			t.Fatal(err)
 		}
 	}
-	f, err := os.Open(filepath.Join(dir, "history.jsonl"))
+	write(t0, 37.4)
+	write(t0.Add(time.Minute), 37.4)
+	write(t0.Add(2*time.Minute), 38)
+	write(t0.Add(3*time.Minute), 38)
+	write(t0.Add(2*time.Minute+HistoryHeartbeat), 38)
+
+	if lines := countLines(t, filepath.Join(dir, "history.jsonl")); lines != 3 {
+		t.Fatalf("history 行数 = %d, want 3（首条 + 变化 + 心跳）", lines)
+	}
+}
+
+func TestAppendHistoryNewStoreWritesFirstReading(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 2; i++ {
+		if err := New(dir).AppendHistory(sampleBalances()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if lines := countLines(t, filepath.Join(dir, "history.jsonl")); lines != 2 {
+		t.Fatalf("history 行数 = %d, want 2（重启后先写一条）", lines)
+	}
+}
+
+func countLines(t *testing.T, path string) int {
+	t.Helper()
+	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +104,5 @@ func TestAppendHistory(t *testing.T) {
 	for sc.Scan() {
 		lines++
 	}
-	if lines != 3 {
-		t.Fatalf("history 行数 = %d, want 3", lines)
-	}
+	return lines
 }

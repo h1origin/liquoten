@@ -15,11 +15,16 @@ import (
 	"github.com/lk/liquoten-cred/internal/providers"
 )
 
+const HistoryHeartbeat = 15 * time.Minute
+
 // Store 封装缓存目录下的读写。
-type Store struct{ dir string }
+type Store struct {
+	dir  string
+	last map[string]historyEntry
+}
 
 // New 指定缓存目录。
-func New(dir string) *Store { return &Store{dir: dir} }
+func New(dir string) *Store { return &Store{dir: dir, last: map[string]historyEntry{}} }
 
 // DefaultDir 返回默认缓存目录（可用 LIQUOTEN_CACHE_DIR 覆盖）。
 func DefaultDir() string {
@@ -82,13 +87,31 @@ func (s *Store) AppendHistory(balances []providers.Balance) error {
 	}
 	defer f.Close()
 	for _, b := range balances {
-		line, err := json.Marshal(historyEntry{Time: b.FetchedAt, Provider: b.Provider, Err: b.Err, Sections: b.Sections})
+		e := historyEntry{Time: b.FetchedAt, Provider: b.Provider, Err: b.Err, Sections: b.Sections}
+		if prev, ok := s.last[b.Provider]; ok && sameReading(prev, e) && e.Time.Sub(prev.Time) < HistoryHeartbeat {
+			continue
+		}
+		line, err := json.Marshal(e)
 		if err != nil {
 			return err
 		}
 		if _, err := f.Write(append(line, '\n')); err != nil {
 			return err
 		}
+		s.last[b.Provider] = e
 	}
 	return nil
+}
+
+func sameReading(a, b historyEntry) bool {
+	if a.Err != b.Err || len(a.Sections) != len(b.Sections) {
+		return false
+	}
+	for i := range a.Sections {
+		x, y := a.Sections[i], b.Sections[i]
+		if x.Name != y.Name || x.UsedPct != y.UsedPct || x.Remaining != y.Remaining || !x.ResetAt.Equal(y.ResetAt) {
+			return false
+		}
+	}
+	return true
 }

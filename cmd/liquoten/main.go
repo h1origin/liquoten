@@ -14,6 +14,7 @@ import (
 	"log"
 	"math/rand/v2"
 	"os"
+	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -96,9 +97,22 @@ func main() {
 	}
 	log.Printf("liquoten 启动：providers=[%s] 轮询间隔=%s 缓存目录=%s", strings.Join(names, ","), interval(cfg), *cacheDir)
 
-	poll := func() {
-		var balances []providers.Balance
+	base := interval(cfg)
+	every := func(p providers.Provider) time.Duration {
+		if sp, ok := p.(providers.Scheduled); ok && sp.PollInterval() > 0 && sp.PollInterval() < base {
+			return sp.PollInterval()
+		}
+		return base
+	}
+	latest := map[string]providers.Balance{}
+	due := map[string]time.Time{}
+
+	poll := func(now time.Time) {
+		var polled []providers.Balance
 		for _, p := range provs {
+			if now.Before(due[p.Name()]) {
+				continue
+			}
 			timeout := providerTimeout(cfg, p.Name())
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			bal, err := p.Query(ctx)
@@ -106,31 +120,49 @@ func main() {
 			if err != nil {
 				bal = providers.Balance{Provider: p.Name(), FetchedAt: time.Now(), Err: err.Error()}
 			}
-			balances = append(balances, bal)
-			logBalance(bal)
+			prev, seen := latest[p.Name()]
+			if !seen || every(p) == base || prev.Err != bal.Err || !reflect.DeepEqual(prev.Sections, bal.Sections) {
+				logBalance(bal)
+			}
+			latest[p.Name()] = bal
+			polled = append(polled, bal)
+			d := every(p)
+			due[p.Name()] = now.Add(d + time.Duration(rand.Float64()*0.2*float64(d)-0.1*float64(d)))
 		}
-		if err := st.WriteState(balances); err != nil {
+		if len(polled) == 0 {
+			return
+		}
+		all := make([]providers.Balance, 0, len(provs))
+		for _, p := range provs {
+			if b, ok := latest[p.Name()]; ok {
+				all = append(all, b)
+			}
+		}
+		if err := st.WriteState(all); err != nil {
 			log.Printf("写缓存失败: %v", err)
 		}
-		if err := st.AppendHistory(balances); err != nil {
+		if err := st.AppendHistory(polled); err != nil {
 			log.Printf("写历史失败: %v", err)
 		}
-		if err := engine.Check(balances); err != nil {
+		if err := engine.Check(polled); err != nil {
 			log.Printf("告警失败: %v", err)
 		}
 	}
 
-	poll()
+	poll(time.Now())
 	if *once {
 		return
 	}
 
-	// 每次轮询间隔加 ±10% 抖动，避免固定节拍
-	base := interval(cfg)
 	for {
-		jitter := base + time.Duration(rand.Float64()*0.2*float64(base)-0.1*float64(base))
-		time.Sleep(jitter)
-		poll()
+		next := time.Time{}
+		for _, t := range due {
+			if next.IsZero() || t.Before(next) {
+				next = t
+			}
+		}
+		time.Sleep(time.Until(next))
+		poll(time.Now())
 	}
 }
 

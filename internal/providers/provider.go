@@ -35,6 +35,10 @@ type Provider interface {
 	Query(ctx context.Context) (Balance, error)
 }
 
+type Scheduled interface {
+	PollInterval() time.Duration
+}
+
 type Authenticator interface {
 	Login(ctx context.Context, site string) error
 }
