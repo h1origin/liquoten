@@ -30,3 +30,10 @@ enabled = true
 # [thresholds.claudecode]
 # "5-hour quota" = 80.0
 # "1-week quota" = 90.0
+
+# ChatGPT Codex 订阅：读取 ~/.codex/sessions 里的用量记录（设 CODEX_HOME 可改目录），只在使用 Codex 时更新。
+# [providers.codex]
+#
+# [thresholds.codex]
+# "5-hour quota" = 80.0
+# "1-week quota" = 90.0

@@ -56,6 +56,10 @@ func Default() Config {
 				"5-hour quota": 80,
 				"1-week quota": 90,
 			},
+			"codex": {
+				"5-hour quota": 80,
+				"1-week quota": 90,
+			},
 		},
 	}
 }

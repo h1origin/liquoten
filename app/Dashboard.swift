@@ -87,10 +87,12 @@ struct DashboardView: View {
                 if let err = b.error, !err.isEmpty {
                     ErrorCard(model: model, balance: b, message: err)
                 } else {
-                    ProviderHeader(provider: b.provider)
-                    let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, min(b.sections.count, 2)))
+                    let balances = b.sections.filter { $0.usedPct < 0 && $0.remaining >= 0 }
+                    let quotas = b.sections.filter { !($0.usedPct < 0 && $0.remaining >= 0) }
+                    ProviderHeader(provider: b.provider, extras: balances)
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, min(quotas.count, 2)))
                     LazyVGrid(columns: columns, spacing: 10) {
-                        ForEach(b.sections, id: \.name) { s in
+                        ForEach(quotas, id: \.name) { s in
                             SectionCard(provider: b.provider, section: s,
                                         points: model.history[HistoryReader.key(b.provider, s.name)] ?? [],
                                         now: model.now)
@@ -124,6 +126,7 @@ enum Style {
         switch provider {
         case "bailian": return "cloud.fill"
         case "claudecode": return "sparkle"
+        case "codex": return "chevron.left.forwardslash.chevron.right"
         default: return "circle.grid.2x2"
         }
     }
@@ -132,14 +135,25 @@ enum Style {
         switch provider {
         case "bailian": return "阿里云百炼 Token Plan"
         case "claudecode": return "Claude Code 订阅"
+        case "codex": return "ChatGPT Codex 订阅"
         default: return provider
         }
+    }
+
+    static func dataTime(_ date: Date, now: Date) -> String {
+        if Calendar.current.isDate(date, inSameDayAs: now) {
+            return date.formatted(date: .omitted, time: .shortened)
+        }
+        let f = DateFormatter()
+        f.dateFormat = "M/d HH:mm"
+        return f.string(from: date)
     }
 
     static func providerDescription(_ provider: String) -> String {
         switch provider {
         case "bailian": return "用阿里云官方命令行工具 bl 查询 Token Plan 用量。需要先安装 bailian-cli，并登录百炼控制台。"
         case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
+        case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额。只在使用 Codex 时更新，无需额外配置。"
         default: return ""
         }
     }
@@ -392,11 +406,17 @@ struct SectionCard: View {
 
 struct ProviderHeader: View {
     let provider: String
+    var extras: [SectionState] = []
 
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: Style.providerIcon(provider)).foregroundStyle(.secondary)
             Text(Style.providerTitle(provider)).font(.callout.weight(.semibold)).foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            ForEach(extras, id: \.name) { e in
+                Chip(text: "\(AppDelegate.sectionTitle(e.name)) \(e.remaining.formatted(.number.precision(.fractionLength(0...2))))")
+                    .fixedSize()
+            }
         }
         .padding(.top, 2)
     }
@@ -634,7 +654,7 @@ struct ServiceRow: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Label("已连接" + (b.fetchedAt.map { " · 数据时间 " + $0.formatted(date: .omitted, time: .shortened) } ?? ""),
+                Label("已连接" + (b.fetchedAt.map { " · 数据时间 " + Style.dataTime($0, now: model.now) } ?? ""),
                       systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.green)

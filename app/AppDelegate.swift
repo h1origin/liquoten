@@ -115,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 parts.append("\(displayName(b.provider)) 出错")
                 continue
             }
-            let sections = b.sections.map { "\(shortName($0.name)) \(Int($0.usedPct.rounded()))%" }
+            let sections = b.sections.filter { $0.usedPct >= 0 }.map { "\(shortName($0.name)) \(Int($0.usedPct.rounded()))%" }
             if sections.isEmpty { continue }
             if balances.count > 1 {
                 parts.append("\(displayName(b.provider)) " + sections.joined(separator: " "))
@@ -132,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         switch provider {
         case "bailian": return "百炼"
         case "claudecode": return "Claude"
+        case "codex": return "Codex"
         default: return provider
         }
     }
@@ -139,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     static let consoles: [(provider: String, title: String, url: String)] = [
         ("bailian", "打开百炼控制台", "https://bailian.console.aliyun.com/"),
         ("claudecode", "打开 Claude 用量页", "https://claude.ai/settings/usage"),
+        ("codex", "打开 Codex 用量页", "https://chatgpt.com/codex/settings/usage"),
     ]
 
     static func shortName(_ name: String) -> String {
@@ -155,6 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         case "5-hour quota": return "5 小时额度"
         case "1-week quota": return "每周额度"
         case "1-month quota": return "月度额度"
+        case "credits": return "Credits 余额"
         default: return name
         }
     }

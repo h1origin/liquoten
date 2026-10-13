@@ -25,6 +25,7 @@ import (
 	"github.com/lk/liquoten-cred/internal/providers"
 	_ "github.com/lk/liquoten-cred/internal/providers/bailian" // 注册 provider
 	"github.com/lk/liquoten-cred/internal/providers/claudecode"
+	_ "github.com/lk/liquoten-cred/internal/providers/codex"
 	"github.com/lk/liquoten-cred/internal/store"
 )
 
@@ -284,6 +285,10 @@ func logBalance(bal providers.Balance) {
 	}
 	parts := make([]string, 0, len(bal.Sections))
 	for _, s := range bal.Sections {
+		if s.UsedPct < 0 && s.Remaining >= 0 {
+			parts = append(parts, fmt.Sprintf("%s=%g", s.Name, s.Remaining))
+			continue
+		}
 		if s.UsedPct < 0 {
 			parts = append(parts, fmt.Sprintf("%s=无限制", s.Name))
 			continue

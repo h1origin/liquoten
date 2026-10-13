@@ -6,7 +6,7 @@ macOS 菜单栏实时显示 LLM 额度/余额的轻量监控工具。只读轮�
 
 > 架构图为可编辑的 Excalidraw 源文件：[docs/liquoten-architecture.excalidraw](docs/liquoten-architecture.excalidraw)（拖入 excalidraw.com 或 VS Code 插件编辑）
 
-- **当前支持**：阿里云百炼 Token Plan、Claude Code 订阅（Pro/Max），5 小时 / 1 周滚动配额（百炼按月计费的套餐为月度配额）百分比 + 重置倒计时
+- **当前支持**：阿里云百炼 Token Plan、Claude Code 订阅（Pro/Max）、ChatGPT Codex 订阅（读本地会话记录），5 小时 / 1 周滚动配额（百炼按月计费的套餐为月度配额）百分比 + 重置倒计时
 - **形态**：原生 Swift 菜单栏 App（Liquoten.app）+ Go daemon；阈值升穿发 macOS 系统通知
 - **通用性**：新增 provider = 实现 `providers.Provider` 接口 + 一行注册，展示层无需改动
 
@@ -128,7 +128,8 @@ cat ~/.cache/liquoten/state.json                            # 与控制台百分
 |---|---|---|
 | 百炼 Token Plan | 官方 CLI `bl usage token-plan --output json` | 5h/周/月窗口已用百分比（只展示套餐实际返回的窗口） |
 | Claude Code 订阅 | statusLine stdin 的 `rate_limits`（`liquoten statusline` 落盘） | 5h/周窗口已用百分比 |
-| OpenAI / Codex | `GET api.openai.com/v1/dashboard/billing/subscription` | hard/soft limit USD；ChatGPT 订阅套餐无接口 |
+| ChatGPT Codex 订阅 | `~/.codex/sessions/**/*.jsonl` 里最新的 `token_count` 事件的 `rate_limits`（`CODEX_HOME` 可覆盖目录） | 按 `window_minutes` 映射窗口（300 → 5h、10080 → 周，其他按时长命名）；credits 余额放 `Remaining` |
+| OpenAI API（按量） | `GET api.openai.com/v1/dashboard/billing/subscription` | hard/soft limit USD |
 | Anthropic API（按量） | Admin API `GET /v1/organizations/cost_report` | 本月累计费用 |
 | DeepSeek | `GET api.deepseek.com/user/balance` | 剩余 CNY |
 | OpenRouter | `GET openrouter.ai/api/v1/credits` | 剩余 credits |
