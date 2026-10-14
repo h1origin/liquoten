@@ -42,12 +42,16 @@ enum Droplet {
         return path
     }
 
-    static func menuBarImage(remaining: Double?, tint: NSColor?) -> NSImage {
-        let size = NSSize(width: 14, height: 18)
+    static func menuBarImage(remaining: Double?, tint: NSColor?, badge: Bool = false) -> NSImage {
+        let size = NSSize(width: badge ? 18 : 14, height: 18)
         let image = NSImage(size: size, flipped: false) { rect in
-            let body = rect.insetBy(dx: 1, dy: 0.8)
+            let body = NSRect(x: 0, y: 0, width: 14, height: rect.height).insetBy(dx: 1, dy: 0.8)
             let shape = outline(in: body)
             shape.lineWidth = 1.4
+            if badge {
+                (tint == nil ? NSColor.black : NSColor.systemBlue).setFill()
+                NSBezierPath(ovalIn: NSRect(x: rect.maxX - 5, y: rect.maxY - 6, width: 5, height: 5)).fill()
+            }
             if let remaining {
                 let level = CGFloat(remaining / 100)
                 let inner = body.insetBy(dx: 2.3, dy: 2.1)

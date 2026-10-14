@@ -5,6 +5,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let daemon = DaemonManager()
+    private let updater = Updater()
     private let notifier = NotificationConsumer()
     private let model = DashboardModel()
     private let popover = NSPopover()
@@ -22,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         model.onToggleLoginItem = { [weak self] in self?.toggleLoginItem() }
         model.onQuit = { NSApp.terminate(nil) }
         model.onSetEnabled = { [weak self] name, enabled in self?.setEnabled(name, enabled) }
+        model.onCheckUpdate = { [weak self] in self?.checkUpdate(manual: true) }
+        model.onSkipUpdate = { [weak self] in self?.skipUpdate() }
 
         let host = NSHostingController(rootView: DashboardView(model: model))
         host.sizingOptions = [.preferredContentSize]
@@ -43,7 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // 60 秒刷新一次菜单栏与通知；daemon 自己按 1 分钟节奏轮询。
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.refresh()
+            self?.checkUpdate(manual: false)
         }
+        checkUpdate(manual: false)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -73,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
         guard let button = statusItem.button else { return }
         button.toolTip = Self.summaryTitle(balances, daemonMissing: daemon.isMissing)
-        button.image = Self.statusImage(balances)
+        button.image = Self.statusImage(balances, badge: model.update != nil)
         button.title = ""
         button.imagePosition = .imageOnly
     }
@@ -168,17 +173,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - 菜单栏图标
 
-    static func statusImage(_ balances: [BalanceState]) -> NSImage {
+    static func statusImage(_ balances: [BalanceState], badge: Bool = false) -> NSImage {
         let used = balances.filter { $0.error?.isEmpty ?? true }
             .flatMap(\.sections).map(\.usedPct).filter { $0 >= 0 }.max()
-        guard let used else { return Droplet.menuBarImage(remaining: nil, tint: nil) }
+        guard let used else { return Droplet.menuBarImage(remaining: nil, tint: nil, badge: badge) }
         let tint: NSColor?
         switch used {
         case 90...: tint = .systemRed
         case 70..<90: tint = .systemOrange
         default: tint = nil
         }
-        return Droplet.menuBarImage(remaining: max(0, 100 - used), tint: tint)
+        return Droplet.menuBarImage(remaining: max(0, 100 - used), tint: tint, badge: badge)
+    }
+
+    // MARK: - 更新
+
+    // 自动检查每 24 小时一次，跳过的版本不再提示；手动检查总是查询并弹窗告知结果。
+    private func checkUpdate(manual: Bool) {
+        guard !model.checkingUpdate, manual || updater.isDue else { return }
+        model.checkingUpdate = true
+        updater.check { [weak self] result in
+            guard let self else { return }
+            self.model.checkingUpdate = false
+            switch result {
+            case .available(let update):
+                if manual || update.version != self.updater.skippedVersion {
+                    self.model.update = update
+                }
+                if manual { self.promptUpdate(update) }
+            case .upToDate(let latest):
+                self.model.update = nil
+                if manual { self.showInfo("已是最新版本", "当前版本 v\(Updater.currentVersion)，最新发布 v\(latest)。") }
+            case .failed(let msg):
+                if manual { self.showInfo("检查更新失败", msg) }
+            }
+            self.rebuildUI()
+        }
+    }
+
+    private func promptUpdate(_ update: AvailableUpdate) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "有新版本 v\(update.version)"
+        alert.informativeText = "当前版本 v\(Updater.currentVersion)。下载新的 dmg 后，把 Liquoten 拖进「应用程序」覆盖旧版即可。"
+        alert.addButton(withTitle: "下载")
+        alert.addButton(withTitle: "稍后")
+        alert.addButton(withTitle: "跳过此版本")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: NSWorkspace.shared.open(update.url)
+        case .alertThirdButtonReturn: skipUpdate()
+        default: break
+        }
+    }
+
+    private func skipUpdate() {
+        updater.skippedVersion = model.update?.version
+        model.update = nil
+        rebuildUI()
+    }
+
+    private func showInfo(_ title: String, _ message: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
     }
 
     // MARK: - 动作

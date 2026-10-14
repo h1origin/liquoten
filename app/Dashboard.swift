@@ -12,6 +12,8 @@ final class DashboardModel: ObservableObject {
     @Published var showingServices = false
     @Published var togglingProvider: String?
     @Published var busyText: String?
+    @Published var update: AvailableUpdate?
+    @Published var checkingUpdate = false
 
     var onRefresh: () -> Void = {}
     var onLogin: (String) -> Void = { _ in }
@@ -20,6 +22,8 @@ final class DashboardModel: ObservableObject {
     var onToggleLoginItem: () -> Void = {}
     var onQuit: () -> Void = {}
     var onSetEnabled: (String, Bool) -> Void = { _, _ in }
+    var onCheckUpdate: () -> Void = {}
+    var onSkipUpdate: () -> Void = {}
 
     var noneEnabled: Bool {
         providersLoaded && !providers.contains(where: \.enabled)
@@ -59,6 +63,9 @@ struct DashboardView: View {
                 ServicesView(model: model)
             } else {
                 HeaderView(model: model)
+                if let update = model.update {
+                    UpdateBanner(model: model, update: update)
+                }
                 content
                 FooterBar(model: model)
             }
@@ -532,6 +539,30 @@ struct NoticeCard: View {
     }
 }
 
+struct UpdateBanner: View {
+    @ObservedObject var model: DashboardModel
+    let update: AvailableUpdate
+
+    var body: some View {
+        Card(tint: .blue) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.down.circle.fill").foregroundStyle(.blue)
+                Text("有新版本 v\(update.version)").font(.callout.weight(.medium))
+                Spacer()
+                Text("当前 v\(Updater.currentVersion)").font(.caption).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 10) {
+                Button("下载") { model.onOpenURL(update.url) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                Button("跳过此版本", action: model.onSkipUpdate)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+            }
+        }
+    }
+}
+
 struct FooterBar: View {
     @ObservedObject var model: DashboardModel
 
@@ -568,6 +599,9 @@ struct FooterBar: View {
                 Toggle("开机自动启动", isOn: Binding(
                     get: { model.loginItemEnabled },
                     set: { _ in model.onToggleLoginItem() }))
+                Button(model.checkingUpdate ? "正在检查更新…" : "检查更新…", action: model.onCheckUpdate)
+                    .disabled(model.checkingUpdate)
+                Text("当前版本 v\(Updater.currentVersion)")
                 Divider()
                 Button("退出 Liquoten", action: model.onQuit)
             } label: {
