@@ -13,6 +13,8 @@ final class DashboardModel: ObservableObject {
     @Published var togglingProvider: String?
     @Published var busyText: String?
     @Published var update: AvailableUpdate?
+    @Published var order: [String] = UserDefaults.standard.stringArray(forKey: "providerOrder") ?? []
+    @Published var draggingProvider: String?
     @Published var checkingUpdate = false
 
     var onRefresh: () -> Void = {}
@@ -24,6 +26,30 @@ final class DashboardModel: ObservableObject {
     var onSetEnabled: (String, Bool) -> Void = { _, _ in }
     var onCheckUpdate: () -> Void = {}
     var onSkipUpdate: () -> Void = {}
+    var onReorder: () -> Void = {}
+
+    // 用户拖动排出的顺序；没排过的服务按名字排在后面。
+    func rank(_ name: String) -> (Int, String) {
+        (order.firstIndex(of: name) ?? Int.max, name)
+    }
+
+    var orderedBalances: [BalanceState] {
+        balances.sorted { rank($0.provider) < rank($1.provider) }
+    }
+
+    var orderedProviders: [ProviderInfo] {
+        providers.sorted { rank($0.name) < rank($1.name) }
+    }
+
+    func move(_ name: String, to target: String) {
+        var names = orderedProviders.map(\.name)
+        guard name != target, let from = names.firstIndex(of: name), let to = names.firstIndex(of: target) else { return }
+        names.remove(at: from)
+        names.insert(name, at: to)
+        order = names
+        UserDefaults.standard.set(names, forKey: "providerOrder")
+        onReorder()
+    }
 
     var noneEnabled: Bool {
         providersLoaded && !providers.contains(where: \.enabled)
@@ -91,7 +117,7 @@ struct DashboardView: View {
         } else if model.balances.isEmpty {
             NoticeCard(icon: "hourglass", text: "等待首次查询…")
         } else {
-            ForEach(model.balances, id: \.provider) { b in
+            ForEach(model.orderedBalances, id: \.provider) { b in
                 if let err = b.error, !err.isEmpty {
                     ErrorCard(model: model, balance: b, message: err)
                 } else {
@@ -636,14 +662,21 @@ struct ServicesView: View {
             } else if model.providers.isEmpty {
                 NoticeCard(icon: "xmark.octagon", text: "读取服务列表失败，请重新安装 Liquoten.app")
             }
-            ForEach(model.providers, id: \.name) { info in
+            ForEach(model.orderedProviders, id: \.name) { info in
                 ServiceRow(model: model, info: info)
+                    .opacity(model.draggingProvider == info.name ? 0.4 : 1)
+                    .onDrop(of: [.text], delegate: ReorderDropDelegate(model: model, target: info.name))
             }
-            Text("开关会写入配置文件 ~/.config/liquoten/config.toml，并立即重新查询。")
+            Text("按住左侧手柄上下拖动调整顺序，面板按此顺序显示，排在最上面的服务用量会显示在菜单栏。开关会写入配置文件 ~/.config/liquoten/config.toml，并立即重新查询。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .onDrop(of: [.text], isTargeted: nil) { _ in
+            model.draggingProvider = nil
+            return true
+        }
+        .onDisappear { model.draggingProvider = nil }
     }
 }
 
@@ -655,6 +688,16 @@ struct ServiceRow: View {
     var body: some View {
         Card {
             HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14, height: 22)
+                    .contentShape(Rectangle())
+                    .help("拖动调整顺序")
+                    .onDrag {
+                        model.draggingProvider = info.name
+                        return NSItemProvider(object: info.name as NSString)
+                    }
                 Image(systemName: Style.providerIcon(info.name))
                     .font(.title3)
                     .foregroundStyle(info.enabled ? Color.accentColor : .secondary)
@@ -739,6 +782,25 @@ struct ServiceRow: View {
         default:
             EmptyView()
         }
+    }
+}
+
+struct ReorderDropDelegate: DropDelegate {
+    let model: DashboardModel
+    let target: String
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging = model.draggingProvider else { return }
+        withAnimation(.easeInOut(duration: 0.15)) { model.move(dragging, to: target) }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        model.draggingProvider = nil
+        return true
     }
 }
 

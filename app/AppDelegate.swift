@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         model.onSetEnabled = { [weak self] name, enabled in self?.setEnabled(name, enabled) }
         model.onCheckUpdate = { [weak self] in self?.checkUpdate(manual: true) }
         model.onSkipUpdate = { [weak self] in self?.skipUpdate() }
+        model.onReorder = { [weak self] in self?.rebuildUI() }
 
         let host = NSHostingController(rootView: DashboardView(model: model))
         host.sizingOptions = [.preferredContentSize]
@@ -77,10 +78,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         model.now = Date()
 
         guard let button = statusItem.button else { return }
-        button.toolTip = Self.summaryTitle(balances, daemonMissing: daemon.isMissing)
+        let ordered = model.orderedBalances
+        button.toolTip = Self.summaryTitle(ordered, daemonMissing: daemon.isMissing)
         button.image = Self.statusImage(balances, badge: model.update != nil)
-        button.title = ""
-        button.imagePosition = .imageOnly
+        if let pct = Self.topUsage(ordered) {
+            button.attributedTitle = NSAttributedString(string: " \(pct)%", attributes: [
+                .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+            ])
+            button.imagePosition = .imageLeading
+        } else {
+            button.title = ""
+            button.imagePosition = .imageOnly
+        }
     }
 
     @objc private func togglePopover(_ sender: Any?) {
@@ -131,6 +140,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if parts.isEmpty { return "liquoten" }
         let title = parts.joined(separator: " · ")
         return title.count > 48 ? String(title.prefix(45)) + "…" : title
+    }
+
+    // 排在最上面的服务中最紧张那一项的已用百分比；该服务出错或没有百分比数据时不显示。
+    static func topUsage(_ ordered: [BalanceState]) -> Int? {
+        guard let top = ordered.first, top.error?.isEmpty ?? true,
+              let used = top.sections.map(\.usedPct).filter({ $0 >= 0 }).max() else { return nil }
+        return Int(used.rounded())
     }
 
     static func displayName(_ provider: String) -> String {
