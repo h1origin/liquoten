@@ -43,6 +43,7 @@ final class DashboardModel: ObservableObject {
 
     func move(_ name: String, to target: String) {
         var names = orderedProviders.map(\.name)
+        for b in orderedBalances where !names.contains(b.provider) { names.append(b.provider) }
         guard name != target, let from = names.firstIndex(of: name), let to = names.firstIndex(of: target) else { return }
         names.remove(at: from)
         names.insert(name, at: to)
@@ -98,6 +99,10 @@ struct DashboardView: View {
         }
         .padding(14)
         .frame(width: 380)
+        .onDrop(of: [.text], isTargeted: nil) { _ in
+            model.draggingProvider = nil
+            return true
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -118,19 +123,32 @@ struct DashboardView: View {
             NoticeCard(icon: "hourglass", text: "等待首次查询…")
         } else {
             ForEach(model.orderedBalances, id: \.provider) { b in
-                if let err = b.error, !err.isEmpty {
-                    ErrorCard(model: model, balance: b, message: err)
-                } else {
-                    let balances = b.sections.filter { $0.usedPct < 0 && $0.remaining >= 0 }
-                    let quotas = b.sections.filter { !($0.usedPct < 0 && $0.remaining >= 0) }
-                    ProviderHeader(provider: b.provider, extras: balances)
-                    let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, min(quotas.count, 2)))
-                    LazyVGrid(columns: columns, spacing: 10) {
-                        ForEach(quotas, id: \.name) { s in
-                            SectionCard(provider: b.provider, section: s,
-                                        points: model.history[HistoryReader.key(b.provider, s.name)] ?? [],
-                                        now: model.now)
-                        }
+                providerGroup(b)
+                    .contentShape(Rectangle())
+                    .opacity(model.draggingProvider == b.provider ? 0.4 : 1)
+                    .onDrag {
+                        model.draggingProvider = b.provider
+                        return NSItemProvider(object: b.provider as NSString)
+                    }
+                    .onDrop(of: [.text], delegate: ReorderDropDelegate(model: model, target: b.provider))
+            }
+        }
+    }
+
+    @ViewBuilder private func providerGroup(_ b: BalanceState) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let err = b.error, !err.isEmpty {
+                ErrorCard(model: model, balance: b, message: err)
+            } else {
+                let balances = b.sections.filter { $0.usedPct < 0 && $0.remaining >= 0 }
+                let quotas = b.sections.filter { !($0.usedPct < 0 && $0.remaining >= 0) }
+                ProviderHeader(provider: b.provider, extras: balances)
+                let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, min(quotas.count, 2)))
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(quotas, id: \.name) { s in
+                        SectionCard(provider: b.provider, section: s,
+                                    points: model.history[HistoryReader.key(b.provider, s.name)] ?? [],
+                                    now: model.now)
                     }
                 }
             }
