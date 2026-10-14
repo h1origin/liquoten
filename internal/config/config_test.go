@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -19,11 +20,11 @@ func TestDefaults(t *testing.T) {
 	if len(cfg.Providers) != 0 {
 		t.Fatalf("默认不应启用任何 provider: %v", cfg.Providers)
 	}
-	if got := cfg.Thresholds["bailian"]["5-hour quota"]; got != 80 {
-		t.Fatalf("默认 5-hour 阈值 = %v, want 80", got)
+	if !slices.Equal(cfg.AlertRemaining, []float64{50, 20}) {
+		t.Fatalf("默认提醒点 = %v, want [50 20]", cfg.AlertRemaining)
 	}
-	if got := cfg.Thresholds["bailian"]["1-month quota"]; got != 90 {
-		t.Fatalf("默认 1-month 阈值 = %v, want 90", got)
+	if len(cfg.Thresholds) != 0 {
+		t.Fatalf("默认不应有额外阈值: %v", cfg.Thresholds)
 	}
 }
 
@@ -59,6 +60,27 @@ timeout = "20s"
 	}
 	if got := cfg.Thresholds["bailian"]["5-hour quota"]; got != 60 {
 		t.Fatalf("5-hour 阈值 = %v, want 60", got)
+	}
+}
+
+func TestAlertRemaining(t *testing.T) {
+	dir := t.TempDir()
+	for content, want := range map[string][]float64{
+		"alert_remaining = [30.0]\n": {30},
+		"alert_remaining = []\n":     {},
+		"notify = \"app\"\n":         {50, 20},
+	} {
+		path := filepath.Join(dir, "config.toml")
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(cfg.AlertRemaining, want) {
+			t.Fatalf("%q: AlertRemaining = %v, want %v", content, cfg.AlertRemaining, want)
+		}
 	}
 }
 

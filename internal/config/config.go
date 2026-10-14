@@ -34,40 +34,23 @@ func (c ProviderCfg) IsEnabled() bool { return c.Enabled == nil || *c.Enabled }
 
 // Config 是完整的运行配置。
 type Config struct {
-	PollInterval time.Duration                 `toml:"poll_interval"`
-	Notify       string                        `toml:"notify"` // "app"（默认）或 "osascript"
-	Providers    map[string]ProviderCfg        `toml:"providers"`
-	Thresholds   map[string]map[string]float64 `toml:"thresholds"`
+	PollInterval time.Duration `toml:"poll_interval"`
+	Notify       string        `toml:"notify"` // "app"（默认）或 "osascript"
+	// AlertRemaining 是剩余百分比提醒点，对所有额度生效；设为 [] 关闭。
+	AlertRemaining []float64                     `toml:"alert_remaining"`
+	Providers      map[string]ProviderCfg        `toml:"providers"`
+	Thresholds     map[string]map[string]float64 `toml:"thresholds"`
 }
 
 // Default 返回内置默认配置：不启用任何 provider（由用户在配置或 App 里选择），
-// 内置各 provider 的默认告警阈值，通知写入 notifications.jsonl 由 Liquoten.app 投递。
+// 每项额度剩余 50%、20% 时各提醒一次，通知写入 notifications.jsonl 由 Liquoten.app 投递。
 func Default() Config {
 	return Config{
-		PollInterval: DefaultPollInterval,
-		Notify:       "app",
-		Providers:    map[string]ProviderCfg{},
-		Thresholds: map[string]map[string]float64{
-			"bailian": {
-				"5-hour quota":  80,
-				"1-week quota":  90,
-				"1-month quota": 90,
-			},
-			"claudecode": {
-				"5-hour quota": 80,
-				"1-week quota": 90,
-			},
-			"codex": {
-				"5-hour quota": 80,
-				"1-week quota": 90,
-			},
-			"qoder": {
-				"1-month quota": 90,
-			},
-			"qodercn": {
-				"1-month quota": 90,
-			},
-		},
+		PollInterval:   DefaultPollInterval,
+		Notify:         "app",
+		AlertRemaining: []float64{50, 20},
+		Providers:      map[string]ProviderCfg{},
+		Thresholds:     map[string]map[string]float64{},
 	}
 }
 
@@ -84,8 +67,12 @@ func Load(path string) (Config, error) {
 		return cfg, err
 	}
 	var user Config
-	if err := toml.Unmarshal(data, &user); err != nil {
+	md, err := toml.Decode(string(data), &user)
+	if err != nil {
 		return cfg, err
+	}
+	if md.IsDefined("alert_remaining") {
+		cfg.AlertRemaining = user.AlertRemaining
 	}
 
 	if user.PollInterval > 0 {

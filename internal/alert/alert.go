@@ -1,5 +1,6 @@
 // Package alert 实现阈值告警：
-//   - 额度百分比升穿阈值时发一次通知（回到阈值以下后允许再次告警）
+//   - 每项额度剩余降到各提醒点（默认剩余 50%、20%）时各发一次通知，回升（新周期）后复位
+//   - [thresholds] 里按已用百分比配置的阈值作为额外提醒点
 //   - 查询连续失败 3 次告警一次，成功即复位
 //   - 已告警状态落盘，daemon 重启后不会立即重复轰炸
 //   - 通知默认写入 notifications.jsonl，由 Liquoten.app 投递系统通知
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -73,19 +75,23 @@ func FileNotifier(cacheDir string) (Notifier, error) {
 // Engine 是告警状态机。
 type Engine struct {
 	mu         sync.Mutex
-	thresholds map[string]map[string]float64 // provider -> section -> 阈值百分比
-	alerted    map[string]bool               // "provider|section" -> 是否已告警
-	failCount  map[string]int                // provider -> 连续失败次数
+	thresholds map[string]map[string]float64 // provider -> section -> 已用百分比阈值
+	remaining  []float64                     // 剩余百分比提醒点，对所有额度生效
+	alerted    map[string]bool               // "provider|section|已用阈值" -> 是否已告警
+	now        func() time.Time
+	failCount  map[string]int // provider -> 连续失败次数
 	notify     Notifier
 	statePath  string
 }
 
 const maxConsecutiveFailures = 3
 
-// New 构造引擎。cacheDir 用于持久化告警状态；notify 为 nil 时静默（测试用）。
-func New(thresholds map[string]map[string]float64, cacheDir string, notify Notifier) (*Engine, error) {
+// New 构造引擎。remaining 是剩余百分比提醒点；cacheDir 用于持久化告警状态；notify 为 nil 时静默（测试用）。
+func New(thresholds map[string]map[string]float64, remaining []float64, cacheDir string, notify Notifier) (*Engine, error) {
 	e := &Engine{
 		thresholds: thresholds,
+		remaining:  remaining,
+		now:        time.Now,
 		alerted:    map[string]bool{},
 		failCount:  map[string]int{},
 		notify:     notify,
@@ -120,21 +126,22 @@ func (e *Engine) Check(balances []providers.Balance) error {
 			if sec.UsedPct < 0 {
 				continue
 			}
-			key := b.Provider + "|" + sec.Name
-			th := e.thresholdFor(b.Provider, sec.Name)
-			if th <= 0 {
-				continue
+			// 一次跨过多个提醒点时只发最紧的那一条，其余一并标记。
+			var crossed float64
+			for _, th := range e.levels(b.Provider, sec.Name) {
+				key := fmt.Sprintf("%s|%s|%g", b.Provider, sec.Name, th)
+				switch {
+				case sec.UsedPct >= th && !e.alerted[key]:
+					e.alerted[key] = true
+					crossed = th
+				case sec.UsedPct < th:
+					e.alerted[key] = false
+				}
 			}
-			switch {
-			case sec.UsedPct >= th && !e.alerted[key]:
-				e.alerted[key] = true
-				msg := fmt.Sprintf("%s %s 已用 %.1f%%（阈值 %.0f%%）", b.Provider, sec.Name, sec.UsedPct, th)
-				if err := e.fire("liquoten 告警", msg); err != nil {
+			if crossed > 0 {
+				if err := e.fire("额度提醒", e.message(b.Provider, sec, crossed)); err != nil {
 					firstErr = err
 				}
-			case sec.UsedPct < th:
-				// 回到阈值以下：复位，允许下次再告警
-				e.alerted[key] = false
 			}
 		}
 	}
@@ -160,11 +167,58 @@ func (e *Engine) persist() error {
 	return os.WriteFile(e.statePath, data, 0o644)
 }
 
-func (e *Engine) thresholdFor(provider, section string) float64 {
-	if m, ok := e.thresholds[provider]; ok {
-		if v, ok := m[section]; ok {
-			return v
+// levels 返回该额度的已用百分比提醒点，升序去重。
+func (e *Engine) levels(provider, section string) []float64 {
+	var out []float64
+	for _, r := range e.remaining {
+		if r > 0 && r < 100 {
+			out = append(out, 100-r)
 		}
 	}
-	return 0
+	if v := e.thresholds[provider][section]; v > 0 {
+		out = append(out, v)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+func (e *Engine) message(provider string, sec providers.Section, level float64) string {
+	msg := fmt.Sprintf("%s %s剩余不到 %g%%（已用 %.0f%%）", displayName(provider), sectionName(sec.Name), 100-level, sec.UsedPct)
+	if !sec.ResetAt.IsZero() {
+		now := e.now()
+		layout := "1月2日 15:04"
+		if y, m, d := sec.ResetAt.Local().Date(); now.Local().Year() == y && now.Local().Month() == m && now.Local().Day() == d {
+			layout = "15:04"
+		}
+		msg += "，" + sec.ResetAt.Local().Format(layout) + " 重置"
+	}
+	return msg
+}
+
+func displayName(provider string) string {
+	switch provider {
+	case "bailian":
+		return "百炼"
+	case "claudecode":
+		return "Claude"
+	case "codex":
+		return "Codex"
+	case "qoder":
+		return "Qoder"
+	case "qodercn":
+		return "Qoder CN"
+	}
+	return provider
+}
+
+func sectionName(name string) string {
+	switch name {
+	case "5-hour quota":
+		return "5 小时额度"
+	case "1-week quota":
+		return "每周额度"
+	case "1-month quota":
+		return "月度额度"
+	}
+	return name + " "
 }

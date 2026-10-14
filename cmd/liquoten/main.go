@@ -79,7 +79,7 @@ func main() {
 		}
 	}
 
-	engine, err := alert.New(cfg.Thresholds, *cacheDir, notifier)
+	engine, err := alert.New(cfg.Thresholds, cfg.AlertRemaining, *cacheDir, notifier)
 	if err != nil {
 		log.Fatalf("初始化告警引擎失败: %v", err)
 	}

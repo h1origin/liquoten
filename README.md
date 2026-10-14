@@ -117,7 +117,7 @@ Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used
 
 ## 配置
 
-见 [config.example.toml](config.example.toml)。默认不启用任何服务：在面板“服务”页打开开关，或在配置里写 `[providers.<name>]`（出现即启用，`enabled = false` 关闭）。默认阈值：5 小时窗口 80%、周窗口 90%，升穿时发一次系统通知，回落后复位（下次升穿再告警）。百炼 Token Plan 用量查询依赖 `bl auth login --console` 的控制台登录态（API key 只用于模型调用，查不到用量）；`api_key` 字段仍会以 `DASHSCOPE_API_KEY` 传给 bl。
+见 [config.example.toml](config.example.toml)。默认不启用任何服务：在面板“服务”页打开开关，或在配置里写 `[providers.<name>]`（出现即启用，`enabled = false` 关闭）。默认每项额度（5 小时 / 每周 / 月度）剩余降到 50%、20% 时各发一次系统通知，例如“Claude 5 小时额度剩余不到 20%（已用 83%），14:30 重置”；新周期用量回落后复位。一次跨过多个提醒点只发最紧的一条。用 `alert_remaining = [50.0, 20.0]` 修改提醒点，设为 `[]` 关闭；`[thresholds.<服务>]` 按已用百分比配置的阈值作为额外提醒点。百炼 Token Plan 用量查询依赖 `bl auth login --console` 的控制台登录态（API key 只用于模型调用，查不到用量）；`api_key` 字段仍会以 `DASHSCOPE_API_KEY` 传给 bl。
 
 环境变量：
 

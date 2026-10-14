@@ -5,11 +5,13 @@
 #   - 也可以在 Liquoten 面板的“服务”页开关，App 会改写本文件对应的 enabled 行
 #   - 百炼用量查询依赖 `bl auth login --console` 的控制台登录态（或在菜单里点"登录百炼"）；
 #     api_key 只会以 DASHSCOPE_API_KEY 传给 bl，查不到 Token Plan 用量
-#   - thresholds 按 provider -> section 名配置，升穿阈值发一次通知
+#   - alert_remaining：每项额度剩余降到这些百分比时各提醒一次（默认 50% 和 20%），[] 关闭
+#   - thresholds 按 provider -> section 名配置已用百分比，作为额外提醒点（可选）
 #   - notify = "app"（默认）把告警事件写入缓存目录，由 Liquoten.app 投递系统通知；
 #     notify = "osascript" 则由 daemon 直接用 macOS 通知（无 App 时的回退方案）
 
 poll_interval = "1m"
+# alert_remaining = [50.0, 20.0]
 # notify = "app"
 
 [providers.bailian]
@@ -18,10 +20,8 @@ enabled = true
 # command = "bl"        # bailian-cli 可执行文件路径（默认 PATH 里的 bl）
 # timeout = "45s"       # 单次查询超时
 
-[thresholds.bailian]
-"5-hour quota" = 80.0
-"1-week quota" = 90.0
-"1-month quota" = 90.0   # 按月计费的 Token Plan 只有这一项
+# [thresholds.bailian]
+# "1-month quota" = 90.0   # 已用 90% 时额外提醒一次
 
 # Claude Code 订阅（Pro/Max）5 小时 / 7 天用量。数据由 Claude Code 的 statusLine
 # 命令 `liquoten statusline` 落盘到缓存目录，配置方法见 README。
