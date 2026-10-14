@@ -175,10 +175,14 @@ type bucket struct {
 	Used       *float64 `json:"used"`
 	Remaining  *float64 `json:"remaining"`
 	Percentage *float64 `json:"percentage"`
+	Available  *bool    `json:"available"`
 }
 
 func (b *bucket) has() bool {
-	return b != nil && (num(b.Total) > 0 || num(b.Cap) > 0 || num(b.Used) > 0 || num(b.Remaining) > 0)
+	if b == nil || (b.Available != nil && !*b.Available) {
+		return false
+	}
+	return num(b.Total) > 0 || num(b.Cap) > 0 || num(b.Used) > 0 || num(b.Remaining) > 0
 }
 
 func (b *bucket) total() float64 {
@@ -212,8 +216,8 @@ func (b *bucket) remaining() float64 {
 	return -1
 }
 
-// parseUsage 把 userQuota 归一为本计费周期的 "1-month quota"，加购余额归为 "credits"。
-// 团队共享的 orgResourcePackage 暂不展示。
+// parseUsage 把本计费周期额度归一为 "1-month quota"，加购余额归为 "credits"。
+// 个人版用 userQuota；团队版成员的 userQuota 全为 0，额度在共享的 orgResourcePackage 里。
 // 字段同时兼容 camelCase 与 snake_case，以及 {"data": {...}} 信封。
 func parseUsage(raw []byte) ([]providers.Section, error) {
 	var m map[string]json.RawMessage
@@ -252,8 +256,12 @@ func parseUsage(raw []byte) ([]providers.Section, error) {
 	}
 
 	var out []providers.Section
-	if b := pick("userQuota", "user_quota"); b.has() {
-		out = append(out, providers.Section{Name: "1-month quota", UsedPct: b.usedPct(), Remaining: b.remaining(), ResetAt: resetAt})
+	quota := pick("userQuota", "user_quota")
+	if !quota.has() {
+		quota = pick("orgResourcePackage", "org_resource_package")
+	}
+	if quota.has() {
+		out = append(out, providers.Section{Name: "1-month quota", UsedPct: quota.usedPct(), Remaining: quota.remaining(), ResetAt: resetAt})
 	}
 	if b := pick("addOnQuota", "add_on_quota"); b.has() {
 		out = append(out, providers.Section{Name: "credits", UsedPct: -1, Remaining: b.remaining()})

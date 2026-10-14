@@ -106,6 +106,25 @@ func TestQueryBadKey(t *testing.T) {
 	}
 }
 
+func TestParseUsageTeams(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "usage_teams.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := parseUsage(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s) != 1 {
+		t.Fatalf("sections = %+v", s)
+	}
+	m := s[0]
+	want := 53848.0 / 171497 * 100
+	if m.Name != "1-month quota" || m.UsedPct != want || m.Remaining != 117649 || !m.ResetAt.Equal(time.UnixMilli(1792684800000)) {
+		t.Fatalf("team = %+v", m)
+	}
+}
+
 func TestParseUsageVariants(t *testing.T) {
 	raw := []byte(`{"data":{"user_quota":{"cap":100,"percentage":0.4},"expires_at":"9999-12-31T00:00:00Z"}}`)
 	s, err := parseUsage(raw)

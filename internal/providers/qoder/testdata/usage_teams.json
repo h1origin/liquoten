@@ -1,0 +1,26 @@
+{
+    "userId": "00000000-0000-0000-0000-000000000000",
+    "userType": "teams",
+    "usageType": "credits",
+    "totalUsagePercentage": 0.0,
+    "isQuotaExceeded": false,
+    "expiresAt": 1792684800000,
+    "upgradeUrl": "https://qoder.com/pricing?client=qoder",
+    "outerProviders": [],
+    "userQuota": {
+        "total": 0.0,
+        "used": 0.0,
+        "remaining": 0.0,
+        "percentage": 0.0,
+        "unit": "credits"
+    },
+    "orgResourcePackage": {
+        "used": 53848.0,
+        "remaining": 117649.0,
+        "percentage": 0.32,
+        "unit": "credits",
+        "cap": 171497.0,
+        "available": true
+    },
+    "isPlanQuotaProrated": false
+}

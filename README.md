@@ -159,7 +159,7 @@ App 的“服务”页通过 daemon 子命令改写配置：
 |---|---|---|
 | 百炼 Token Plan | 官方 CLI `bl usage token-plan --output json` | 5h/周/月窗口已用百分比（只展示套餐实际返回的窗口） |
 | Claude Code 订阅 | statusLine stdin 的 `rate_limits`（`liquoten statusline` 落盘） | 5h/周窗口已用百分比 |
-| Qoder / Qoder CN | 个人访问令牌换 job token 后 `GET openapi.qoder.sh` / `openapi.qoder.com.cn` 的 `/api/v2/quota/usage`（未见官方文档，参照社区插件 pi-provider-qoder-cn） | `userQuota` → 本计费周期 `1-month quota` 已用百分比 + 剩余 Credits；`addOnQuota` → `credits` 余额 |
+| Qoder / Qoder CN | 个人访问令牌换 job token 后 `GET openapi.qoder.sh` / `openapi.qoder.com.cn` 的 `/api/v2/quota/usage`（未见官方文档，参照社区插件 pi-provider-qoder-cn） | `userQuota`（个人版）或团队版成员的 `orgResourcePackage`（团队共享 Credits）→ 本计费周期 `1-month quota` 已用百分比 + 剩余 Credits；`addOnQuota` → `credits` 余额 |
 | ChatGPT Codex 订阅 | `~/.codex/sessions/**/*.jsonl` 里最新的 `token_count` 事件的 `rate_limits`（`CODEX_HOME` 可覆盖目录） | 按 `window_minutes` 映射窗口（300 → 5h、10080 → 周，其他按时长命名）；credits 余额放 `Remaining` |
 | OpenAI API（按量） | `GET api.openai.com/v1/dashboard/billing/subscription` | hard/soft limit USD |
 | Anthropic API（按量） | Admin API `GET /v1/organizations/cost_report` | 本月累计费用 |
