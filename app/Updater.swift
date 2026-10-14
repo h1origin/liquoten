@@ -6,8 +6,9 @@ struct AvailableUpdate: Equatable {
 }
 
 // 查询 GitHub Releases 最新正式版，与当前版本比较；只提示，不自动下载安装。
-final class Updater {
-    static let releasesAPI = URL(string: "https://api.github.com/repos/hi-origin/liquoten/releases/latest")!
+// 不走 api.github.com（匿名每小时 60 次，共用出口 IP 时容易 403），而是读
+// releases/latest 的 302 跳转地址 …/releases/tag/vX.Y.Z 得到最新版本号。
+final class Updater: NSObject, URLSessionTaskDelegate {
     static let releasesPage = URL(string: "https://github.com/hi-origin/liquoten/releases/latest")!
     static let interval: TimeInterval = 24 * 3600
 
@@ -35,38 +36,45 @@ final class Updater {
         case failed(String)
     }
 
+    private lazy var session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
+
     func check(completion: @escaping (Result) -> Void) {
-        var req = URLRequest(url: Self.releasesAPI, timeoutInterval: 20)
-        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        var req = URLRequest(url: Self.releasesPage, timeoutInterval: 20)
+        req.httpMethod = "HEAD"
         req.setValue("Liquoten/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
-        URLSession.shared.dataTask(with: req) { [weak self] data, resp, err in
+        session.dataTask(with: req) { [weak self] _, resp, err in
             let result: Result
+            let http = resp as? HTTPURLResponse
             if let err {
                 result = .failed(err.localizedDescription)
-            } else if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
-                result = .failed("GitHub 返回 HTTP \(http.statusCode)")
-            } else if let data, let release = try? JSONDecoder().decode(Release.self, from: data) {
+            } else if let location = http?.value(forHTTPHeaderField: "Location"),
+                      let url = URL(string: location, relativeTo: Self.releasesPage)?.absoluteURL,
+                      let latest = Self.version(fromTagURL: url) {
                 self?.defaults.set(Date(), forKey: self?.lastCheckKey ?? "")
-                let latest = Self.normalize(release.tagName)
                 if Self.isNewer(latest, than: Self.currentVersion) {
-                    result = .available(AvailableUpdate(version: latest, url: URL(string: release.htmlURL) ?? Self.releasesPage))
+                    result = .available(AvailableUpdate(version: latest, url: url))
                 } else {
                     result = .upToDate(latest)
                 }
             } else {
-                result = .failed("无法解析 GitHub 返回的版本信息")
+                result = .failed("GitHub 返回 HTTP \(http?.statusCode ?? 0)，没有拿到最新版本")
             }
             DispatchQueue.main.async { completion(result) }
         }.resume()
     }
 
-    private struct Release: Decodable {
-        let tagName: String
-        let htmlURL: String
-        enum CodingKeys: String, CodingKey {
-            case tagName = "tag_name"
-            case htmlURL = "html_url"
-        }
+    // 不跟随跳转，直接读 Location。
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+
+    // …/releases/tag/v1.0.5 → "1.0.5"
+    static func version(fromTagURL url: URL) -> String? {
+        let parts = url.pathComponents
+        guard let i = parts.firstIndex(of: "tag"), i + 1 < parts.count else { return nil }
+        let v = normalize(parts[i + 1])
+        return v.first?.isNumber == true ? v : nil
     }
 
     static func normalize(_ tag: String) -> String {
