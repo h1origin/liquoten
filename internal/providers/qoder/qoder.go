@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lk/liquoten-cred/internal/providers"
+	"github.com/h1origin/liquoten/internal/providers"
 )
 
 // Site 描述一个 Qoder 版本。

@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lk/liquoten-cred/internal/config"
-	"github.com/lk/liquoten-cred/internal/providers"
-	"github.com/lk/liquoten-cred/internal/store"
+	"github.com/h1origin/liquoten/internal/config"
+	"github.com/h1origin/liquoten/internal/providers"
+	"github.com/h1origin/liquoten/internal/store"
 )
 
 const (

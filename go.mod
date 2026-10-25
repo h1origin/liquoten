@@ -1,4 +1,4 @@
-module github.com/lk/liquoten-cred
+module github.com/h1origin/liquoten
 
 go 1.27.1
 

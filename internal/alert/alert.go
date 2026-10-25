@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lk/liquoten-cred/internal/providers"
+	"github.com/h1origin/liquoten/internal/providers"
 )
 
 // Notifier 发出系统通知。默认通道是 FileNotifier（App 投递）；OSAScriptNotifier 是无 App 时的回退方案。

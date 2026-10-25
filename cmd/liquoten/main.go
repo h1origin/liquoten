@@ -21,14 +21,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lk/liquoten-cred/internal/alert"
-	"github.com/lk/liquoten-cred/internal/config"
-	"github.com/lk/liquoten-cred/internal/providers"
-	_ "github.com/lk/liquoten-cred/internal/providers/bailian" // 注册 provider
-	"github.com/lk/liquoten-cred/internal/providers/claudecode"
-	_ "github.com/lk/liquoten-cred/internal/providers/codex"
-	_ "github.com/lk/liquoten-cred/internal/providers/qoder"
-	"github.com/lk/liquoten-cred/internal/store"
+	"github.com/h1origin/liquoten/internal/alert"
+	"github.com/h1origin/liquoten/internal/config"
+	"github.com/h1origin/liquoten/internal/providers"
+	_ "github.com/h1origin/liquoten/internal/providers/bailian" // 注册 provider
+	"github.com/h1origin/liquoten/internal/providers/claudecode"
+	_ "github.com/h1origin/liquoten/internal/providers/codex"
+	_ "github.com/h1origin/liquoten/internal/providers/qoder"
+	"github.com/h1origin/liquoten/internal/store"
 )
 
 func main() {
