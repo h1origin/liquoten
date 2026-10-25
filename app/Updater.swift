@@ -9,7 +9,7 @@ struct AvailableUpdate: Equatable {
 // 不走 api.github.com（匿名每小时 60 次，共用出口 IP 时容易 403），而是读
 // releases/latest 的 302 跳转地址 …/releases/tag/vX.Y.Z 得到最新版本号。
 final class Updater: NSObject, URLSessionTaskDelegate {
-    static let releasesPage = URL(string: "https://github.com/hi-origin/liquoten/releases/latest")!
+    static let releasesPage = URL(string: "https://github.com/h1origin/liquoten/releases/latest")!
     static let interval: TimeInterval = 24 * 3600
 
     private let defaults = UserDefaults.standard

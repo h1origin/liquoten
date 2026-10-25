@@ -27,7 +27,7 @@ daemon 由 App 作为子进程拉起（意外退出 5 秒后自动重启）；Ap
 
 ### 方式一：下载 dmg（推荐）
 
-到仓库的 [Releases](https://github.com/hi-origin/liquoten/releases) 页面下载最新的 `Liquoten-x.y.z.dmg`，双击打开后把 Liquoten 拖进“应用程序”。支持 Apple 芯片与 Intel 芯片，需要 macOS 13 或更高版本。
+到仓库的 [Releases](https://github.com/h1origin/liquoten/releases) 页面下载最新的 `Liquoten-x.y.z.dmg`，双击打开后把 Liquoten 拖进“应用程序”。支持 Apple 芯片与 Intel 芯片，需要 macOS 13 或更高版本。
 
 dmg 没有经过苹果签名公证，第一次打开会提示“无法验证开发者”，任选一种方式放行：
 
