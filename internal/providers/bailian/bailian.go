@@ -1,23 +1,14 @@
 // Package bailian 实现阿里云百炼(Token Plan)额度查询。
 //
-// 支持两种模式：配置了阿里云 AK/SK（或 ~/.bailian/config.json 里有）时，
-// 直接签名调用 OpenAPI 换取 CLI access token，再查控制台网关；否则执行
-// 官方开源 CLI(bailian-cli)的 `bl usage token-plan --output json`。
-//
+// 使用 AccessKey ID / Secret 签名调用 OpenAPI 换取 access token，再查控制台网关。
 // Token Plan 的余量语义是滚动配额百分比：5 小时窗口 + 1 周窗口的已用百分比
 // 及重置时间，与官方控制台展示一致，没有"绝对剩余 credits"接口。
 package bailian
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -29,24 +20,15 @@ const Name = "bailian"
 
 const defaultTimeout = 45 * time.Second
 
-const loginTimeout = 5 * time.Minute
-
-// Provider 查询百炼 Token Plan 用量，有 AK/SK 时直连，否则执行 bl。
+// Provider 查询百炼 Token Plan 用量。
 type Provider struct {
-	command                   string
-	apiKey                    string
-	configuredAccessKeyID     string
-	configuredAccessKeySecret string
-	timeout                   time.Duration
-	tokenBaseURL              string
-	gatewayBaseURL            string
-	mu                        sync.Mutex
-	accessKeyID               string
-	accessKeySecret           string
-	region                    string
-	site                      string
-	switchAgent               json.RawMessage
-	token                     string
+	accessKeyID     string
+	accessKeySecret string
+	timeout         time.Duration
+	tokenBaseURL    string
+	gatewayBaseURL  string
+	mu              sync.Mutex
+	token           string
 }
 
 func init() {
@@ -55,27 +37,17 @@ func init() {
 	})
 }
 
-// New 构造百炼 provider。opts.Command 留空时使用 PATH 中的 `bl`。
+// New 构造百炼 provider。
 func New(opts providers.Options) *Provider {
-	cmd := opts.Command
-	if cmd == "" {
-		cmd = "bl"
-	}
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
-	p := &Provider{
-		command:                   cmd,
-		apiKey:                    opts.APIKey,
-		configuredAccessKeyID:     opts.AccessKeyID,
-		configuredAccessKeySecret: opts.AccessKeySecret,
-		region:                    defaultRegion,
-		site:                      defaultSite,
-		timeout:                   timeout,
+	return &Provider{
+		accessKeyID:     opts.AccessKeyID,
+		accessKeySecret: opts.AccessKeySecret,
+		timeout:         timeout,
 	}
-	p.initAuth()
-	return p
 }
 
 // Name 返回注册表名称。
@@ -88,27 +60,10 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 
-	if !p.hasConfiguredCredentials() {
-		p.refreshAuth()
+	if !p.hasCredentials() {
+		return bal, errors.New("未配置阿里云 AccessKey，请在服务页填写")
 	}
-	if auth := p.snapshot(); auth.hasCredentials() {
-		return p.queryDirect(ctx, bal, auth)
-	}
-
-	out, err := p.run(ctx, "usage", "token-plan", "--output", "json")
-	if err != nil {
-		return bal, fmt.Errorf("查询 Token Plan 用量失败: %w", err)
-	}
-	tp, err := parseTokenPlan(out)
-	if err != nil {
-		return bal, fmt.Errorf("解析 token-plan 输出失败: %w", err)
-	}
-
-	bal.Sections = sections(tp)
-	if len(bal.Sections) == 0 {
-		return bal, fmt.Errorf("token-plan 输出中没有可识别的额度字段: %s", strings.TrimSpace(string(out)))
-	}
-	return bal, nil
+	return p.queryDirect(ctx, bal)
 }
 
 func sections(tp tokenPlan) []providers.Section {
@@ -131,131 +86,7 @@ func sections(tp tokenPlan) []providers.Section {
 	return out
 }
 
-func (p *Provider) Login(ctx context.Context, site string) error {
-	if site != "domestic" && site != "international" {
-		return fmt.Errorf("未知站点 %q（可选: domestic, international）", site)
-	}
-	ctx, cancel := context.WithTimeout(ctx, loginTimeout)
-	defer cancel()
-	if _, err := p.run(ctx, "auth", "login", "--console", "--console-site", site); err != nil {
-		return fmt.Errorf("百炼控制台登录失败: %w", err)
-	}
-	return nil
-}
-
-// npm 全局目录常见位置；从 Finder 启动的 App 的 PATH 里没有这些目录。
-var searchDirs = func() []string {
-	home, _ := os.UserHomeDir()
-	return []string{
-		"/opt/homebrew/bin",
-		"/usr/local/bin",
-		filepath.Join(home, ".npm-global", "bin"),
-		filepath.Join(home, ".volta", "bin"),
-		filepath.Join(home, ".local", "bin"),
-	}
-}
-
-// lookup 按 PATH 与常见安装目录查找可执行文件，返回绝对路径。
-func lookup(name string) (string, bool) {
-	if filepath.IsAbs(name) {
-		if st, err := os.Stat(name); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
-			return name, true
-		}
-		return "", false
-	}
-	if path, err := exec.LookPath(name); err == nil {
-		if abs, err := filepath.Abs(path); err == nil {
-			return abs, true
-		}
-	}
-	for _, dir := range searchDirs() {
-		if path, ok := lookup(filepath.Join(dir, name)); ok {
-			return path, true
-		}
-	}
-	return "", false
-}
-
-// Preflight 检查 bl 是否已安装，返回其绝对路径；直连模式不依赖 bl。
-func (p *Provider) Preflight(ctx context.Context) (string, error) {
-	if !p.hasConfiguredCredentials() {
-		p.refreshAuth()
-	}
-	if p.snapshot().hasCredentials() {
-		return p.command, nil
-	}
-	path, ok := lookup(p.command)
-	if !ok && p.command != "bl" {
-		path, ok = lookup("bl")
-	}
-	if !ok {
-		return "", fmt.Errorf("没有找到百炼命令行工具 bl：%w", providers.ErrNotInstalled)
-	}
-	return path, nil
-}
-
-// Install 用 npm 全局安装 bailian-cli（需要 Node.js ≥ 22.12）。
-func (p *Provider) Install(ctx context.Context) error {
-	npm, ok := lookup("npm")
-	if !ok {
-		return errors.New("没有找到 npm。请先安装 Node.js 22.12 或更高版本（https://nodejs.org，或在终端执行 brew install node），再重试")
-	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, npm, "install", "-g", "bailian-cli")
-	cmd.Env = withDirInPath(os.Environ(), filepath.Dir(npm))
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if len(msg) > 600 {
-			msg = "…" + msg[len(msg)-600:]
-		}
-		return fmt.Errorf("npm install -g bailian-cli 失败: %v\n%s", err, msg)
-	}
-	if _, ok := lookup("bl"); !ok {
-		return errors.New("bailian-cli 已安装，但仍找不到 bl 命令，请在终端执行 npm prefix -g 检查全局安装目录")
-	}
-	return nil
-}
-
-// withDirInPath 把 dir 放到 PATH 最前：bl 与 npm 都是 `#!/usr/bin/env node` 脚本，
-// 需要在 PATH 中找到与之同目录的 node。
-func withDirInPath(env []string, dir string) []string {
-	for i, kv := range env {
-		if strings.HasPrefix(kv, "PATH=") {
-			env[i] = "PATH=" + dir + string(os.PathListSeparator) + strings.TrimPrefix(kv, "PATH=")
-			return env
-		}
-	}
-	return append(env, "PATH="+dir)
-}
-
-// run 执行 CLI 并返回 stdout；失败时把 stderr 带进错误信息。
-func (p *Provider) run(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, p.command, args...)
-	cmd.Env = os.Environ()
-	if path, ok := lookup(p.command); ok {
-		cmd.Path = path
-		cmd.Env = withDirInPath(cmd.Env, filepath.Dir(path))
-	}
-	if p.apiKey != "" {
-		cmd.Env = append(cmd.Env, "DASHSCOPE_API_KEY="+p.apiKey)
-	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, fmt.Errorf("%s %s: %s", p.command, strings.Join(args, " "), msg)
-	}
-	return stdout.Bytes(), nil
-}
-
-// tokenPlan 对应 `bl usage token-plan --output json` 的输出字段。
-// API 返回的百分比是 [0,1] 比值，重置时间是毫秒 epoch。
+// tokenPlan 对应 Token Plan 用量字段。API 返回的百分比是 [0,1] 比值，重置时间是毫秒 epoch。
 type tokenPlan struct {
 	Per5Hour       *float64 `json:"per5HourPercentage"`
 	Per5HourReset  *int64   `json:"per5HourResetTime"`

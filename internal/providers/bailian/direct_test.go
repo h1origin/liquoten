@@ -17,11 +17,6 @@ import (
 	"github.com/h1origin/liquoten/internal/providers"
 )
 
-func TestMain(m *testing.M) {
-	bailianConfigPath = func() string { return "" }
-	os.Exit(m.Run())
-}
-
 func TestSignACS3FixedVector(t *testing.T) {
 	date := time.Date(2026, 10, 29, 8, 0, 0, 0, time.UTC)
 	got := signACS3("LTAItestkeyid", "testsecret", http.MethodPost, "modelstudio.cn-beijing.aliyuncs.com",
@@ -169,7 +164,6 @@ func TestDirectQueryWithFixtures(t *testing.T) {
 								ProductCode    string `json:"productCode"`
 								SwitchUserType int    `json:"switchUserType"`
 								ConsoleSite    string `json:"consoleSite"`
-								SwitchAgent    *bool  `json:"switchAgent"`
 							} `json:"cornerstoneParam"`
 						} `json:"Data"`
 					}
@@ -182,8 +176,8 @@ func TestDirectQueryWithFixtures(t *testing.T) {
 						cp.SwitchUserType != 3 || cp.ConsoleSite != "BAILIAN_ALIYUN" {
 						t.Errorf("params = %+v", params)
 					}
-					if cp.SwitchAgent == nil || !*cp.SwitchAgent {
-						t.Errorf("switchAgent = %v, want true", cp.SwitchAgent)
+					if strings.Contains(r.Form.Get("params"), "switchAgent") {
+						t.Errorf("params should not contain switchAgent: %s", r.Form.Get("params"))
 					}
 					w.Header().Set("Content-Type", "application/json")
 					w.Write(raw)
@@ -196,7 +190,6 @@ func TestDirectQueryWithFixtures(t *testing.T) {
 			p := New(providers.Options{AccessKeyID: "LTAItestkeyid", AccessKeySecret: "testsecret"})
 			p.tokenBaseURL = server.URL
 			p.gatewayBaseURL = server.URL
-			p.switchAgent = json.RawMessage("true")
 			bal, err := p.Query(context.Background())
 			if err != nil {
 				t.Fatalf("Query: %v", err)
@@ -374,55 +367,7 @@ func TestTokenFailureDoesNotLeakSecret(t *testing.T) {
 	}
 }
 
-func TestBLConfigCredentialsAndRegion(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	content := `{
-  "access_key_id": "LTAIfrombl",
-  "access_key_secret": "bl-secret",
-  "console_region": "ap-southeast-1",
-  "console_site": "international",
-  "console_switch_agent": true
-}`
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	orig := bailianConfigPath
-	t.Cleanup(func() { bailianConfigPath = orig })
-	bailianConfigPath = func() string { return path }
-
-	p := New(providers.Options{})
-	if p.accessKeyID != "LTAIfrombl" || p.accessKeySecret != "bl-secret" {
-		t.Fatalf("credentials = %q / %q", p.accessKeyID, p.accessKeySecret)
-	}
-	if p.region != "ap-southeast-1" || p.site != "international" {
-		t.Fatalf("region/site = %q / %q", p.region, p.site)
-	}
-	if string(p.switchAgent) != "true" {
-		t.Fatalf("switchAgent = %s", p.switchAgent)
-	}
-	if !p.hasCredentials() {
-		t.Fatal("hasCredentials should be true")
-	}
-	if got, err := p.Preflight(context.Background()); err != nil || got != "bl" {
-		t.Fatalf("Preflight = %q, %v; want command unchanged", got, err)
-	}
-
-	q := New(providers.Options{AccessKeyID: "LTAIconfig", AccessKeySecret: "config-secret"})
-	if q.accessKeyID != "LTAIconfig" || q.accessKeySecret != "config-secret" {
-		t.Fatalf("config credentials should win: %q / %q", q.accessKeyID, q.accessKeySecret)
-	}
-	if q.region != "ap-southeast-1" || q.site != "international" {
-		t.Fatalf("config mode should keep startup region/site: %q / %q", q.region, q.site)
-	}
-}
-
 func TestAccessKeyStatus(t *testing.T) {
-	orig := bailianConfigPath
-	t.Cleanup(func() { bailianConfigPath = orig })
-
-	dir := t.TempDir()
-	missing := filepath.Join(dir, "missing.json")
-	bailianConfigPath = func() string { return missing }
 	if source, masked := New(providers.Options{}).AccessKeyStatus(); source != "" || masked != "" {
 		t.Fatalf("no AK: source/masked = %q / %q", source, masked)
 	}
@@ -430,25 +375,6 @@ func TestAccessKeyStatus(t *testing.T) {
 	configured := New(providers.Options{AccessKeyID: "LTAIconfig123456ytkt", AccessKeySecret: "config-secret"})
 	if source, masked := configured.AccessKeyStatus(); source != "config" || masked != "LTAI…ytkt" {
 		t.Fatalf("config AK: source/masked = %q / %q", source, masked)
-	}
-
-	path := filepath.Join(dir, "config.json")
-	content := `{"access_key_id":"LTAIbl123456ytkt","access_key_secret":"bl-secret"}`
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	bailianConfigPath = func() string { return path }
-	fromBL := New(providers.Options{})
-	if source, masked := fromBL.AccessKeyStatus(); source != "bl" || masked != "LTAI…ytkt" {
-		t.Fatalf("bl AK: source/masked = %q / %q", source, masked)
-	}
-
-	content = `{"access_key_id":"LTAIblNEW1234abcd","access_key_secret":"bl-secret-2"}`
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if source, masked := fromBL.AccessKeyStatus(); source != "bl" || masked != "LTAI…abcd" {
-		t.Fatalf("reloaded bl AK: source/masked = %q / %q", source, masked)
 	}
 }
 
@@ -467,177 +393,6 @@ func TestMaskAccessKeyID(t *testing.T) {
 		if got := maskAccessKeyID(id); got != want {
 			t.Errorf("maskAccessKeyID(%q) = %q, want %q", id, got, want)
 		}
-	}
-}
-
-func TestBLConfigReloadSwitchesToDirectAndInvalidatesToken(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	orig := bailianConfigPath
-	t.Cleanup(func() { bailianConfigPath = orig })
-	bailianConfigPath = func() string { return path }
-
-	fake, err := filepath.Abs(filepath.Join("testdata", "fake-bl.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := os.ReadFile(filepath.Join("testdata", "usage-data-v2.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var mu sync.Mutex
-	tokenCalls, usageCalls := 0, 0
-	lastAuthorization := ""
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case tokenPath:
-			mu.Lock()
-			tokenCalls++
-			n := tokenCalls
-			lastAuthorization = r.Header.Get("authorization")
-			mu.Unlock()
-			fmt.Fprintf(w, `{"Success":true,"cliAccessToken":"token-%d"}`, n)
-		case "/cli/api.json":
-			mu.Lock()
-			usageCalls++
-			mu.Unlock()
-			w.Write(raw)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	p := New(providers.Options{Command: fake})
-	p.tokenBaseURL = server.URL
-	p.gatewayBaseURL = server.URL
-
-	bal, err := p.Query(context.Background())
-	if err != nil {
-		t.Fatalf("Query via bl: %v", err)
-	}
-	if len(bal.Sections) == 0 || bal.Sections[0].UsedPct != 37.4 {
-		t.Fatalf("initial Sections = %+v, want bl fixture 37.4%%", bal.Sections)
-	}
-	mu.Lock()
-	if tokenCalls != 0 || usageCalls != 0 {
-		t.Fatalf("initial direct calls = token %d, usage %d; want 0, 0", tokenCalls, usageCalls)
-	}
-	mu.Unlock()
-
-	writeConfig := func(id, region string) {
-		content := fmt.Sprintf(`{"access_key_id":%q,"access_key_secret":"bl-secret","console_region":%q,"console_site":"domestic"}`, id, region)
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	writeConfig("LTAI-1", "cn-beijing")
-	bal, err = p.Query(context.Background())
-	if err != nil {
-		t.Fatalf("Query via direct: %v", err)
-	}
-	if len(bal.Sections) == 0 || bal.Sections[0].UsedPct != 42 {
-		t.Fatalf("direct Sections = %+v, want 42%%", bal.Sections)
-	}
-	mu.Lock()
-	if tokenCalls != 1 || usageCalls != 1 {
-		t.Fatalf("direct calls = token %d, usage %d; want 1, 1", tokenCalls, usageCalls)
-	}
-	if !strings.Contains(lastAuthorization, "Credential=LTAI-1,") {
-		t.Fatalf("authorization = %q, want Credential=LTAI-1", lastAuthorization)
-	}
-	mu.Unlock()
-
-	writeConfig("LTAI-2", "cn-beijing")
-	if _, err := p.Query(context.Background()); err != nil {
-		t.Fatalf("Query after AK ID change: %v", err)
-	}
-	mu.Lock()
-	if tokenCalls != 2 || usageCalls != 2 {
-		t.Fatalf("calls after AK ID change = token %d, usage %d; want 2, 2", tokenCalls, usageCalls)
-	}
-	if !strings.Contains(lastAuthorization, "Credential=LTAI-2,") {
-		t.Fatalf("authorization after AK ID change = %q, want Credential=LTAI-2", lastAuthorization)
-	}
-	mu.Unlock()
-
-	writeConfig("LTAI-2", "ap-southeast-1")
-	if _, err := p.Query(context.Background()); err != nil {
-		t.Fatalf("Query after region change: %v", err)
-	}
-	mu.Lock()
-	if tokenCalls != 3 || usageCalls != 3 {
-		t.Fatalf("calls after region change = token %d, usage %d; want 3, 3", tokenCalls, usageCalls)
-	}
-	mu.Unlock()
-
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	bal, err = p.Query(context.Background())
-	if err != nil {
-		t.Fatalf("Query after config removal: %v", err)
-	}
-	if len(bal.Sections) == 0 || bal.Sections[0].UsedPct != 37.4 {
-		t.Fatalf("Sections after config removal = %+v, want bl fixture 37.4%%", bal.Sections)
-	}
-	mu.Lock()
-	if tokenCalls != 3 || usageCalls != 3 {
-		t.Fatalf("calls after config removal = token %d, usage %d; want 3, 3", tokenCalls, usageCalls)
-	}
-	mu.Unlock()
-
-	if err := os.WriteFile(path, []byte("not json"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	bal, err = p.Query(context.Background())
-	if err != nil {
-		t.Fatalf("Query with invalid config: %v", err)
-	}
-	if len(bal.Sections) == 0 || bal.Sections[0].UsedPct != 37.4 {
-		t.Fatalf("Sections with invalid config = %+v, want bl fixture 37.4%%", bal.Sections)
-	}
-}
-
-func TestPreflightReloadsBLConfig(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	orig := bailianConfigPath
-	t.Cleanup(func() { bailianConfigPath = orig })
-	bailianConfigPath = func() string { return path }
-	origDirs := searchDirs
-	t.Cleanup(func() { searchDirs = origDirs })
-	searchDirs = func() []string { return nil }
-	t.Setenv("PATH", t.TempDir())
-
-	p := New(providers.Options{Command: "/definitely/not/a/real/bl"})
-	if _, err := p.Preflight(context.Background()); err == nil {
-		t.Fatal("Preflight should fail without bl or AK/SK")
-	}
-	content := `{"access_key_id":"LTAI-1","access_key_secret":"bl-secret"}`
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	got, err := p.Preflight(context.Background())
-	if err != nil {
-		t.Fatalf("Preflight after config: %v", err)
-	}
-	if got != p.command {
-		t.Fatalf("Preflight = %q, want %q", got, p.command)
-	}
-}
-
-func TestPreflightDirectWithoutBL(t *testing.T) {
-	p := New(providers.Options{
-		AccessKeyID:     "LTAItestkeyid",
-		AccessKeySecret: "testsecret",
-		Command:         "/definitely/not/a/real/bl",
-	})
-	got, err := p.Preflight(context.Background())
-	if err != nil {
-		t.Fatalf("Preflight: %v", err)
-	}
-	if got != p.command {
-		t.Fatalf("Preflight = %q, want %q", got, p.command)
 	}
 }
 

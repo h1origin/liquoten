@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/h1origin/liquoten/internal/config"
 )
@@ -16,7 +17,7 @@ enabled = true
 api_key = "sk-test"
 access_key_id = "LTAI-old"
 access_key_secret = "secret-old"
-command = "/opt/homebrew/bin/bl"
+timeout = "30s"
 `
 	for _, cmd := range []string{"clear-access-key", "disable"} {
 		t.Run(cmd, func(t *testing.T) {
@@ -35,8 +36,8 @@ command = "/opt/homebrew/bin/bl"
 			if pc.AccessKeyID != "" || pc.AccessKeySecret != "" {
 				t.Fatalf("AccessKey 未删除: %q / %q", pc.AccessKeyID, pc.AccessKeySecret)
 			}
-			if pc.Command != "/opt/homebrew/bin/bl" {
-				t.Fatalf("command 被破坏: %q", pc.Command)
+			if pc.Timeout != 30*time.Second {
+				t.Fatalf("timeout 被破坏: %v", pc.Timeout)
 			}
 			if cmd == "disable" && (pc.IsEnabled() || pc.APIKey != "") {
 				t.Fatalf("disable 应同时关闭并删除 api_key: %+v", pc)
@@ -52,6 +53,21 @@ command = "/opt/homebrew/bin/bl"
 				t.Fatalf("注释被破坏:\n%s", data)
 			}
 		})
+	}
+}
+
+func TestEnableBailianWithoutAccessKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := manageProviders("enable", []string{"-config", path, "bailian"}); err != nil {
+		t.Fatalf("enable bailian without AK: %v", err)
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc, ok := cfg.Providers["bailian"]
+	if !ok || !pc.IsEnabled() {
+		t.Fatalf("bailian 应允许在未填 AccessKey 时开启: %+v", pc)
 	}
 }
 

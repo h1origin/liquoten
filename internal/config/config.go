@@ -27,7 +27,6 @@ type ProviderCfg struct {
 	APIKey          string        `toml:"api_key"`
 	AccessKeyID     string        `toml:"access_key_id"`
 	AccessKeySecret string        `toml:"access_key_secret"`
-	Command         string        `toml:"command"`
 	Timeout         time.Duration `toml:"timeout"`
 }
 
@@ -100,9 +99,6 @@ func Load(path string) (Config, error) {
 		if u.AccessKeySecret != "" {
 			base.AccessKeySecret = u.AccessKeySecret
 		}
-		if u.Command != "" {
-			base.Command = u.Command
-		}
 		if u.Timeout > 0 {
 			base.Timeout = u.Timeout
 		}
@@ -138,7 +134,6 @@ type ProviderUpdate struct {
 	APIKey          *string
 	AccessKeyID     *string
 	AccessKeySecret *string
-	Command         *string
 	Delete          []string
 }
 
@@ -161,9 +156,6 @@ func SetProvider(path, name string, u ProviderUpdate) error {
 	}
 	if u.AccessKeySecret != nil {
 		set = append(set, [2]string{"access_key_secret", tomlString(*u.AccessKeySecret)})
-	}
-	if u.Command != nil {
-		set = append(set, [2]string{"command", tomlString(*u.Command)})
 	}
 	header := regexp.MustCompile(`^\s*\[\s*providers\.` + regexp.QuoteMeta(name) + `\s*\]\s*(#.*)?$`)
 	table := regexp.MustCompile(`^\s*\[`)

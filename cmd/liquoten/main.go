@@ -36,18 +36,8 @@ func main() {
 		statusline()
 		return
 	}
-	if len(os.Args) > 1 && slices.Contains([]string{"providers", "enable", "disable", "install", "set-access-key", "clear-access-key"}, os.Args[1]) {
+	if len(os.Args) > 1 && slices.Contains([]string{"providers", "enable", "disable", "set-access-key", "clear-access-key"}, os.Args[1]) {
 		if err := manageProviders(os.Args[1], os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			if errors.Is(err, providers.ErrNotInstalled) {
-				os.Exit(exitNotInstalled)
-			}
-			os.Exit(1)
-		}
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "login" {
-		if err := login(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -202,14 +192,10 @@ func statusline() {
 	fmt.Println(claudecode.StatusLine(in))
 }
 
-// exitNotInstalled 是 enable 因依赖工具缺失而失败时的退出码，App 据此提示安装。
-const exitNotInstalled = 3
-
-// manageProviders 实现 providers / enable / disable / install / set-access-key / clear-access-key 子命令，供 App 的“服务”页调用。
+// manageProviders 实现 providers / enable / disable / set-access-key / clear-access-key 子命令，供 App 的“服务”页调用。
 //
-//	enable [-api-key-stdin] <name>：检查依赖（缺失时退出码 3），需要 key 的先验证 key 再写入配置
+//	enable [-api-key-stdin] <name>：需要 key 的先验证 key 再写入配置
 //	disable <name>：停用，并删除配置中的 api_key / access_key_id / access_key_secret
-//	install <name>：安装 provider 依赖的外部工具（如 bailian-cli）
 //	set-access-key <name>：从标准输入读 AK ID 和 secret，验证通过后写入配置
 //	clear-access-key <name>：删除配置中的 access_key_id / access_key_secret，不改 enabled
 func manageProviders(cmd string, args []string) error {
@@ -228,7 +214,6 @@ func manageProviders(cmd string, args []string) error {
 			Name            string `json:"name"`
 			Enabled         bool   `json:"enabled"`
 			RequiresAPIKey  bool   `json:"requires_api_key"`
-			Installable     bool   `json:"installable"`
 			AccessKeySource string `json:"access_key_source"`
 			AccessKeyMasked string `json:"access_key_masked"`
 		}
@@ -240,13 +225,11 @@ func manageProviders(cmd string, args []string) error {
 				APIKey:          pc.APIKey,
 				AccessKeyID:     pc.AccessKeyID,
 				AccessKeySecret: pc.AccessKeySecret,
-				Command:         pc.Command,
 				Timeout:         pc.Timeout,
 				DataDir:         store.DefaultDir(),
 			}); err == nil {
 				k, ok := p.(providers.KeyRequired)
 				it.RequiresAPIKey = ok && k.RequiresAPIKey()
-				_, it.Installable = p.(providers.Installer)
 				if r, ok := p.(providers.AccessKeyReporter); ok {
 					it.AccessKeySource, it.AccessKeyMasked = r.AccessKeyStatus()
 				}
@@ -261,21 +244,10 @@ func manageProviders(cmd string, args []string) error {
 		return fmt.Errorf("用法: liquoten %s [-config 路径] <provider>（可选: %s）", cmd, strings.Join(providers.Names(), ", "))
 	}
 	pc := cfg.Providers[name]
-	opts := providers.Options{APIKey: pc.APIKey, AccessKeyID: pc.AccessKeyID, AccessKeySecret: pc.AccessKeySecret, Command: pc.Command, Timeout: pc.Timeout, DataDir: store.DefaultDir()}
+	opts := providers.Options{APIKey: pc.APIKey, AccessKeyID: pc.AccessKeyID, AccessKeySecret: pc.AccessKeySecret, Timeout: pc.Timeout, DataDir: store.DefaultDir()}
 	ctx := context.Background()
 
 	switch cmd {
-	case "install":
-		p, err := providers.New(name, opts)
-		if err != nil {
-			return err
-		}
-		in, ok := p.(providers.Installer)
-		if !ok {
-			return fmt.Errorf("provider %q 不需要安装依赖", name)
-		}
-		return in.Install(ctx)
-
 	case "disable":
 		off := false
 		return config.SetProvider(*configPath, name, config.ProviderUpdate{
@@ -351,15 +323,6 @@ func manageProviders(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if pf, ok := p.(providers.Preflighter); ok {
-		path, err := pf.Preflight(ctx)
-		if err != nil {
-			return err
-		}
-		if path != pc.Command {
-			update.Command = &path
-		}
-	}
 	if k, ok := p.(providers.KeyRequired); ok && k.RequiresAPIKey() {
 		if opts.APIKey == "" {
 			return errors.New("请填写 API Key")
@@ -372,32 +335,6 @@ func manageProviders(cmd string, args []string) error {
 		}
 	}
 	return config.SetProvider(*configPath, name, update)
-}
-
-func login(args []string) error {
-	fs := flag.NewFlagSet("login", flag.ExitOnError)
-	configPath := fs.String("config", config.DefaultPath(), "配置文件路径")
-	site := fs.String("site", "domestic", "站点：domestic 或 international")
-	fs.Parse(args)
-	name := fs.Arg(0)
-	if name == "" {
-		return fmt.Errorf("用法: liquoten login [-config 路径] [-site domestic|international] <provider>")
-	}
-
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		return fmt.Errorf("加载配置失败 %s: %w", *configPath, err)
-	}
-	pc := cfg.Providers[name]
-	p, err := providers.New(name, providers.Options{APIKey: pc.APIKey, AccessKeyID: pc.AccessKeyID, AccessKeySecret: pc.AccessKeySecret, Command: pc.Command})
-	if err != nil {
-		return err
-	}
-	a, ok := p.(providers.Authenticator)
-	if !ok {
-		return fmt.Errorf("provider %q 不支持登录", name)
-	}
-	return a.Login(context.Background(), *site)
 }
 
 func buildProviders(cfg config.Config, dataDir string) []providers.Provider {
@@ -417,7 +354,6 @@ func buildProviders(cfg config.Config, dataDir string) []providers.Provider {
 			APIKey:          pc.APIKey,
 			AccessKeyID:     pc.AccessKeyID,
 			AccessKeySecret: pc.AccessKeySecret,
-			Command:         pc.Command,
 			Timeout:         pc.Timeout,
 			DataDir:         dataDir,
 		})

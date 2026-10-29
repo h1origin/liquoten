@@ -117,7 +117,7 @@ func TestAlertStatePersistedAcrossRestart(t *testing.T) {
 func TestConsecutiveFailureAlert(t *testing.T) {
 	r := &recorder{}
 	e, _ := New(map[string]map[string]float64{}, nil, t.TempDir(), r.notify)
-	fail := providers.Balance{Provider: "bailian", FetchedAt: time.Now(), Err: "bl not found"}
+	fail := providers.Balance{Provider: "bailian", FetchedAt: time.Now(), Err: "查询失败"}
 
 	for i := 1; i <= 2; i++ {
 		if err := e.Check([]providers.Balance{fail}); err != nil {

@@ -7,7 +7,6 @@ package providers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -40,10 +39,6 @@ type Scheduled interface {
 	PollInterval() time.Duration
 }
 
-type Authenticator interface {
-	Login(ctx context.Context, site string) error
-}
-
 // KeyRequired 由必须填写 API Key 才能查询的 provider 实现。
 type KeyRequired interface {
 	RequiresAPIKey() bool
@@ -54,26 +49,11 @@ type AccessKeyReporter interface {
 	AccessKeyStatus() (source string, maskedID string)
 }
 
-// ErrNotInstalled 表示 provider 依赖的外部工具未安装。
-var ErrNotInstalled = errors.New("依赖工具未安装")
-
-// Preflighter 在启用前检查依赖；返回依赖的实际路径（写入配置），
-// 依赖缺失时返回包装了 ErrNotInstalled 的错误。
-type Preflighter interface {
-	Preflight(ctx context.Context) (command string, err error)
-}
-
-// Installer 安装 provider 依赖的外部工具。
-type Installer interface {
-	Install(ctx context.Context) error
-}
-
 // Options 由 config 层填充后传给各 provider 的工厂函数。
 type Options struct {
-	APIKey          string        // 可选；留空则依赖环境变量或 CLI 自身的登录态
-	AccessKeyID     string        // 可选；阿里云 AK ID，置空时 provider 可回退到 CLI 配置
+	APIKey          string        // 可选；需要 API Key 的 provider 使用
+	AccessKeyID     string        // 可选；阿里云 AK ID
 	AccessKeySecret string        // 可选；阿里云 AK Secret
-	Command         string        // 覆盖 provider 默认的可执行程序路径（测试/自定义安装用）
 	Timeout         time.Duration // 单次查询超时；<=0 使用 provider 默认值
 	DataDir         string        // daemon 缓存目录；读本地快照的 provider 使用
 }

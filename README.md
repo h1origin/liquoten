@@ -13,7 +13,7 @@ macOS 菜单栏实时显示 LLM 额度/余额的轻量监控工具。只读轮�
 ## 工作原理
 
 ```
-百炼 OpenAPI / bailian-cli  →  daemon 每 1min 轮询  →  state.json / history.jsonl
+百炼 OpenAPI  →  daemon 每 1min 轮询  →  state.json / history.jsonl
                                                  ↘ 阈值升穿 → notifications.jsonl
 state.json          ← Liquoten.app 只读渲染菜单栏
 notifications.jsonl ← Liquoten.app 消费并投递系统通知
@@ -34,26 +34,22 @@ dmg 没有经过苹果签名公证，第一次打开会提示“无法验证开�
 - 打开“系统设置 → 隐私与安全性”，在页面下方找到 Liquoten，点“仍要打开”
 - 或在终端执行 `xattr -dr com.apple.quarantine /Applications/Liquoten.app`
 
-打开后点菜单栏的水滴图标 → “服务”，选择要监控的服务。监控百炼可直接在配置里填阿里云 AK/SK，或安装官方 CLI 并登录（见下方第 1 步）。
+打开后点菜单栏的水滴图标 → “服务”，选择要监控的服务。监控百炼需要在服务页填写阿里云 AccessKey（建议使用只授予百炼权限的 RAM 子账号）。
 
 ### 方式二：从源码构建
 
-前置：Go ≥ 1.21（`brew install go`，go.mod 会自动拉取 1.27 工具链）、Node ≥ 22.12（仅百炼 CLI 模式需要）、Xcode Command Line Tools（`xcode-select --install`，编译 Swift 需要）。
+前置：Go ≥ 1.21（`brew install go`，go.mod 会自动拉取 1.27 工具链）、Xcode Command Line Tools（`xcode-select --install`，编译 Swift 需要）。
 
 ```bash
-# 1. 百炼：配置 AK/SK 时可跳过这一步；否则安装官方 CLI 并登录
-npm install -g bailian-cli
-bl auth login --console                  # 浏览器登录控制台（国际站加 --console-site international）；也可装好 App 后在菜单里点"登录百炼"
-
-# 2. 配置（可选，默认配置即可跑，见下方"配置"）
+# 1. 配置（可选，默认配置即可跑，见下方"配置"）
 mkdir -p ~/.config/liquoten
 cp config.example.toml ~/.config/liquoten/config.toml
 
-# 3. 构建并安装 App（在仓库根目录执行）
+# 2. 构建并安装 App（在仓库根目录执行）
 ./app/build.sh
 mv build/Liquoten.app /Applications/      # 建议放 /Applications（"开机自动启动"依赖 bundle 路径稳定）
 
-# 4. 启动
+# 3. 启动
 open /Applications/Liquoten.app
 ```
 
@@ -69,14 +65,7 @@ git tag v1.0.0 && git push origin v1.0.0
 
 本地预览 dmg：`./app/package-dmg.sh 1.0.0` → `build/Liquoten-1.0.0.dmg`。
 
-注意：走 CLI 模式时，App 从 Finder 启动时 PATH 里没有 `bl`（npm 全局目录不在其中）。如果 daemon 报 `bl: command not found`，在 `config.toml` 里写死绝对路径：
-
-```toml
-[providers.bailian]
-command = "/opt/homebrew/bin/bl"   # 用 `which bl` 查到实际路径
-```
-
-如果配置了阿里云 AK/SK（`config.toml` 里的 `access_key_id` / `access_key_secret`，或 `~/.bailian/config.json`），liquoten 会直接签名查询，不需要 `bl`，也不会因为控制台 token 过期而要重新登录。建议使用只授予百炼只读权限的 RAM 子账号；AK Secret 在配置文件里是明文。
+监控百炼：在“服务”页百炼那一行填写阿里云 AccessKey ID / Secret（建议使用只授予百炼权限的 RAM 子账号）。AccessKey 以明文保存在 `~/.config/liquoten/config.toml`，关闭服务时删除。
 
 ## Claude Code 订阅用量
 
@@ -105,10 +94,10 @@ Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used
 - 按服务分组的额度卡片：已用百分比、走势图、用量条、剩余比例、重置倒计时。走势图按额度类型不同：5 小时额度画当前窗口（开始 → 重置）的分钟级阶梯线；周额度画 7 根立柱，每根是该天（按重置时刻切分）用掉的周额度百分点，没有历史数据的天显示“?”；月度额度画本期（重置时间往前一个月 → 重置）每天一根细柱，同样是当天用掉的百分点，下方标出起止日期和单日最多用量，不混入上一期数据。数据来自 history.jsonl
 - 按住任意服务的卡片上下拖动即可调整顺序（与“服务”页的拖动排序同步）
 - 点击面板以外的任何地方（包括另一块屏幕）面板即收起
-- 出错卡片：把错误翻译成中文提示；百炼未登录时直接给出"登录国内站 / 登录国际站"按钮
+- 出错卡片：把错误翻译成中文提示
 - 底部：刷新（重启 daemon 立即查询）、服务、打开（控制台 / Claude 用量页 / 数据目录）、设置（开机自动启动、检查更新、当前版本、退出）
 - 检查更新：启动后及每 24 小时读取一次 GitHub `releases/latest` 的跳转地址得到最新正式版（不走 api.github.com，避免匿名限流 403），有新版本时菜单栏水滴右上角出现小圆点、面板顶部出现提示，可「下载」（打开 Release 页，下载 dmg 覆盖安装）或「跳过此版本」；齿轮菜单可随时手动检查。只提示，不自动下载替换
-- 服务页：按住每行左侧手柄上下拖动调整顺序，面板与菜单栏百分比都按此顺序；列出所有已实现的服务，开关即写入配置文件并立即重新查询；百炼可在此登录国内站 / 国际站，Claude Code 可一键复制 statusLine 配置。新装时不启用任何服务，首次打开面板会引导去选择
+- 服务页：按住每行左侧手柄上下拖动调整顺序，面板与菜单栏百分比都按此顺序；列出所有已实现的服务，开关即写入配置文件并立即重新查询；百炼可在此填写阿里云 AccessKey，Claude Code 可一键复制 statusLine 配置。新装时不启用任何服务，首次打开面板会引导去选择
 
 
 ## 通知
@@ -119,17 +108,16 @@ Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used
 
 ## 配置
 
-见 [config.example.toml](config.example.toml)。默认不启用任何服务：在面板“服务”页打开开关，或在配置里写 `[providers.<name>]`（出现即启用，`enabled = false` 关闭）。默认每项额度（5 小时 / 每周 / 月度）剩余降到 50%、20% 时各发一次系统通知，例如“Claude 5 小时额度剩余不到 20%（已用 83%），14:30 重置”；新周期用量回落后复位。一次跨过多个提醒点只发最紧的一条。用 `alert_remaining = [50.0, 20.0]` 修改提醒点，设为 `[]` 关闭；`[thresholds.<服务>]` 按已用百分比配置的阈值作为额外提醒点。百炼 Token Plan 用量查询优先使用 `access_key_id` / `access_key_secret` 直连（没有配置时也会读取 `~/.bailian/config.json` 里的 AK/SK、region/site）；没有 AK/SK 时才退回 `bl auth login --console` 的控制台登录态。`api_key` 字段仍会以 `DASHSCOPE_API_KEY` 传给 bl。
+见 [config.example.toml](config.example.toml)。默认不启用任何服务：在面板“服务”页打开开关，或在配置里写 `[providers.<name>]`（出现即启用，`enabled = false` 关闭）。默认每项额度（5 小时 / 每周 / 月度）剩余降到 50%、20% 时各发一次系统通知，例如“Claude 5 小时额度剩余不到 20%（已用 83%），14:30 重置”；新周期用量回落后复位。一次跨过多个提醒点只发最紧的一条。用 `alert_remaining = [50.0, 20.0]` 修改提醒点，设为 `[]` 关闭；`[thresholds.<服务>]` 按已用百分比配置的阈值作为额外提醒点。百炼 Token Plan 用量查询使用 `access_key_id` / `access_key_secret`（在服务页填写，或直接写配置文件）；没有填写时状态行会提示去服务页填写。
 
 环境变量：
 
 | 变量 | 作用 |
 |---|---|
-| `DASHSCOPE_API_KEY` | 百炼 API key（CLI 模式传给 bailian-cli；直连模式不需要） |
 | `LIQUOTEN_CONFIG` | 覆盖默认配置文件路径（`~/.config/liquoten/config.toml`） |
 | `LIQUOTEN_CACHE_DIR` | 覆盖默认缓存目录（`~/.cache/liquoten`） |
 
-daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。子命令 `liquoten providers` 列出服务及启用状态（JSON），`liquoten enable|disable <provider>` 改写配置文件里的开关（面板“服务”页即调用它们）。子命令 `liquoten login [-site domestic|international] bailian` 执行控制台登录（菜单"登录百炼"即调用它）。
+daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。子命令 `liquoten providers` 列出服务及启用状态（JSON），`liquoten enable|disable <provider>` 改写配置文件里的开关（面板“服务”页即调用它们）；`liquoten set-access-key|clear-access-key <provider>` 由服务页填写/清除百炼 AccessKey 时调用。
 
 ## 验证
 
@@ -146,9 +134,10 @@ cat ~/.cache/liquoten/state.json                            # 与控制台百分
 
 App 的“服务”页通过 daemon 子命令改写配置：
 
-- `liquoten enable [-api-key-stdin] <name>`：需要 API Key 的服务（Qoder / Qoder CN）从标准输入读 key 并实际查询一次，验证通过才写入；依赖外部工具的服务（百炼）在未配置 AK/SK 时先检查 `bl`，找不到时退出码 3，App 提示执行 `liquoten install bailian`（即 `npm install -g bailian-cli`），装不上开关保持关闭；配置了 AK/SK 时直接通过，不依赖 `bl`。找到的 `bl` 绝对路径会写进 `command`，避免从 Finder 启动时 PATH 里没有 npm 全局目录。
-- `liquoten disable <name>`：停用并删除 `api_key`。
-- 含 `api_key` 的配置文件以 0600 权限写入。
+- `liquoten enable [-api-key-stdin] <name>`：需要 API Key 的服务（Qoder / Qoder CN）从标准输入读 key 并实际查询一次，验证通过才写入。
+- `liquoten disable <name>`：停用并删除 `api_key`、`access_key_id`、`access_key_secret`。
+- `liquoten set-access-key <name>`：从标准输入读百炼 AccessKey ID / Secret，实际查询一次验证通过后写入配置并启用；`liquoten clear-access-key <name>` 删除这两个键，不改启用状态。
+- 含密钥的配置文件以 0600 权限写入。
 
 ## 扩展新 provider
 
@@ -160,7 +149,7 @@ App 的“服务”页通过 daemon 子命令改写配置：
 
 | Provider | 查询接口 | 语义 |
 |---|---|---|
-| 百炼 Token Plan | 有 AK/SK 时：阿里云 OpenAPI `GenerateCLIAccessToken` + 控制台网关 `/tokenplan/personal/api/v2/usage`；否则官方 CLI `bl usage token-plan --output json` | 5h/周/月窗口已用百分比（只展示套餐实际返回的窗口） |
+| 百炼 Token Plan | 阿里云 OpenAPI `GenerateCLIAccessToken` + 控制台网关 `/tokenplan/personal/api/v2/usage` | 5h/周/月窗口已用百分比（只展示套餐实际返回的窗口） |
 | Claude Code 订阅 | statusLine stdin 的 `rate_limits`（`liquoten statusline` 落盘） | 5h/周窗口已用百分比 |
 | Qoder / Qoder CN | 个人访问令牌换 job token 后 `GET openapi.qoder.sh` / `openapi.qoder.com.cn` 的 `/api/v2/quota/usage`（未见官方文档，参照社区插件 pi-provider-qoder-cn） | `userQuota`（个人版）或团队版成员的 `orgResourcePackage`（团队共享 Credits）→ 本计费周期 `1-month quota` 已用百分比 + 剩余 Credits；`addOnQuota` → `credits` 余额 |
 | ChatGPT Codex 订阅 | `~/.codex/sessions/**/*.jsonl` 里最新的 `token_count` 事件的 `rate_limits`（`CODEX_HOME` 可覆盖目录） | 按 `window_minutes` 映射窗口（300 → 5h、10080 → 周，其他按时长命名）；credits 余额放 `Remaining` |
@@ -181,7 +170,7 @@ app/                    Liquoten.app 源码（Swift：菜单栏 + 通知消费 +
 cmd/liquoten/           daemon 入口（轮询循环、由 App 或 launchd 常驻）
 internal/config/       配置加载（TOML + 环境变量）
 internal/providers/    Provider 接口 + 注册表
-  bailian/             百炼 adapter（AK/SK 直连 / exec bailian-cli + fixture 单测）
+  bailian/             百炼 adapter（AK/SK 直连 + fixture 单测）
   claudecode/          Claude Code adapter（statusline 落盘 + 读快照）
   qoder/               Qoder / Qoder CN adapter（PAT 换 token + 查额度，httptest 单测）
 internal/store/        state.json 原子写 + history.jsonl 追加
@@ -197,8 +186,7 @@ docs/                  架构图（.excalidraw 可编辑源文件 + PNG 预览�
 |---|---|
 | 菜单栏显示 `liquoten ✕` | daemon 二进制缺失，App bundle 不完整，重新 `./app/build.sh` |
 | 菜单栏一直 `liquoten` | 等首次轮询（启动即轮询）；仍不行看日志 `tail ~/Library/Logs/liquoten.log` |
-| 百炼报 `No console access token found` | CLI 模式：菜单里点"登录百炼"选国内站/国际站，或终端执行 `bl auth login --console`；也可以配置 AK/SK 走直连模式 |
-| `bl: command not found` | 配置 `access_key_id` / `access_key_secret` 走直连，或 `npm install -g bailian-cli`（Node ≥ 22.12）；CLI 模式也可在配置里写 `command = "/绝对路径/bl"` |
+| 百炼报“未配置阿里云 AccessKey” | 在服务页填写阿里云 AccessKey（建议使用只授予百炼权限的 RAM 子账号） |
 | 超阈值但不弹通知 | 系统设置 → 通知里允许 Liquoten；勿扰模式会吞掉通知；`notify` 配置是否被改成了别的值 |
 | 百分比与控制台不一致 | 有最多一个轮询间隔的延迟；菜单里"立即刷新"后对比 |
 | App 退了额度还在记 | 正常：daemon 随 App 退出；如需 App 不在也要监控，走 launchd 路线（见下） |
@@ -235,12 +223,12 @@ rm -rf ~/.cache/liquoten ~/.config/liquoten
 
 ## 设计与边界
 
-- **为什么有 AK/SK 直连**：百炼 Token Plan 的额度接口是控制台内部网关（未公开）。有 AK/SK 时 liquoten 按官方 CLI 的做法自己签名换 CLI token 再查网关，token 过期自动续，不依赖 Node / `bl`；没有 AK/SK 时仍 exec 官方开源 CLI，保持原行为
+- **为什么有 AK/SK 直连**：百炼 Token Plan 的额度接口是控制台内部网关（未公开）。liquoten 用阿里云 AK/SK 自己签名换 access token 再查网关，token 过期自动续
 - **Token Plan 没有"绝对剩余 credits"**：官方只暴露滚动窗口的已用百分比，菜单栏展示与官方控制台对齐
 - **通知走文件而不是进程间通信**：daemon 追加写 jsonl、App 定时消费，两端零耦合——任一端挂掉不影响另一端，重启后游标去重不重发
 - **历史数据**：`~/.cache/liquoten/history.jsonl` 只在读数变化时追加，读数不变则每 15 分钟记一条心跳；只保留最近 35 天（daemon 启动时及每天清理一次，够画最长 31 天的月度周期）（v1 用 JSONL 而非 SQLite，零依赖；做趋势看板时再评估迁移）
-- **失败降级**：查询连续失败 3 次告警一次；未配置 AK/SK 且 `bl` 未安装时 daemon 启动即报错并给出提示
-- **Free tier**：百炼按模型粒度的免费额度查询留到 v1.1（数据在 `bl usage free --output json`，结构已核实）
+- **失败降级**：查询连续失败 3 次告警一次；未配置访问密钥时状态行提示去服务页填写
+- **Free tier**：百炼按模型粒度的免费额度查询留到 v1.1
 
 ## 路线图
 

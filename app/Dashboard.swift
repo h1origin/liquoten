@@ -3,7 +3,6 @@ import SwiftUI
 final class DashboardModel: ObservableObject {
     @Published var balances: [BalanceState] = []
     @Published var history: [String: [HistoryPoint]] = [:]
-    @Published var loggingIn = false
     @Published var loginItemEnabled = false
     @Published var daemonMissing = false
     @Published var now = Date()
@@ -18,7 +17,6 @@ final class DashboardModel: ObservableObject {
     @Published var checkingUpdate = false
 
     var onRefresh: () -> Void = {}
-    var onLogin: (String) -> Void = { _ in }
     var onOpenURL: (URL) -> Void = { _ in }
     var onOpenDataDir: () -> Void = {}
     var onToggleLoginItem: () -> Void = {}
@@ -60,10 +58,6 @@ final class DashboardModel: ObservableObject {
 
     func balance(_ provider: String) -> BalanceState? {
         balances.first { $0.provider == provider }
-    }
-
-    func providerInfo(_ provider: String) -> ProviderInfo? {
-        providers.first { $0.name == provider }
     }
 
     var okSections: [SectionState] {
@@ -212,7 +206,7 @@ enum Style {
 
     static func providerDescription(_ provider: String) -> String {
         switch provider {
-        case "bailian": return "查询 Token Plan 用量。填写阿里云 AccessKey 即可直接查询；也可以安装官方命令行工具 bl 并登录百炼控制台。"
+        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量。建议使用只授予百炼权限的 RAM 子账号。"
         case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
         case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额。只在使用 Codex 时更新，无需额外配置。"
         case "qoder": return "用个人访问令牌查询 qoder.com 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key。"
@@ -270,15 +264,14 @@ enum Style {
     }
 
     static func friendlyError(_ provider: String, _ err: String) -> String {
+        if err.contains("未配置阿里云 AccessKey") {
+            return "还没有填写阿里云 AccessKey，请在服务页填写。"
+        }
         if err.contains("NotAuthorised") {
             return "这个 AccessKey 没有查询 Token Plan 用量的权限，请在 RAM 控制台给它授予百炼权限，或换用订阅套餐的账号。"
         }
         if err.contains("InvalidAccessKeyId") || err.contains("SignatureDoesNotMatch") || err.contains("MissingAccessKeyId") {
             return "AccessKey ID 或 Secret 不正确。"
-        }
-        if err.contains("No console access token") { return "还没有登录百炼控制台，请点下方按钮登录。" }
-        if err.contains("command not found") || err.contains("executable file not found") {
-            return "找不到 bl 命令，请安装 bailian-cli 或在配置里写 bl 的完整路径。"
         }
         if let r = err.range(of: #""message":\s*"([^"]*)""#, options: .regularExpression) {
             return String(err[r]).replacingOccurrences(of: #"^"message":\s*""#, with: "", options: .regularExpression)
@@ -563,27 +556,7 @@ struct ErrorCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-            if showBailianLogin {
-                if model.loggingIn {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("等待浏览器完成登录…").font(.callout).foregroundStyle(.secondary)
-                    }
-                } else {
-                    HStack {
-                        Button("登录国内站") { model.onLogin("domestic") }
-                        Button("登录国际站") { model.onLogin("international") }
-                    }
-                    .controlSize(.small)
-                }
-            }
         }
-    }
-
-    private var showBailianLogin: Bool {
-        guard balance.provider == "bailian" else { return false }
-        let info = model.providerInfo("bailian")
-        return (info?.enabled ?? true) && (info?.accessKeySource.isEmpty ?? true)
     }
 }
 
@@ -778,7 +751,7 @@ struct ServiceRow: View {
         VStack(alignment: .leading, spacing: 6) {
             if info.hasAccessKey && !editingAccessKey {
                 HStack(spacing: 8) {
-                    Text("AccessKey：\(info.accessKeyMasked)（\(accessKeySourceLabel)）")
+                    Text("AccessKey：\(info.accessKeyMasked)（liquoten 配置）")
                         .font(.caption)
                     Spacer(minLength: 4)
                     Button("修改") {
@@ -825,10 +798,6 @@ struct ServiceRow: View {
         }
     }
 
-    private var accessKeySourceLabel: String {
-        info.accessKeySource == "config" ? "liquoten 配置" : "来自 bl 配置"
-    }
-
     private var canSaveAccessKey: Bool {
         !accessKeyID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !accessKeySecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -866,21 +835,6 @@ struct ServiceRow: View {
 
     @ViewBuilder private var actions: some View {
         switch info.name {
-        case "bailian":
-            if info.accessKeySource.isEmpty {
-                if model.loggingIn {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("等待浏览器完成登录…").font(.caption).foregroundStyle(.secondary)
-                    }
-                } else {
-                    HStack {
-                        Button("登录国内站") { model.onLogin("domestic") }
-                        Button("登录国际站") { model.onLogin("international") }
-                    }
-                    .controlSize(.small)
-                }
-            }
         case "claudecode":
             VStack(alignment: .leading, spacing: 4) {
                 Button(copied ? "已复制" : "复制状态栏配置") {

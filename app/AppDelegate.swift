@@ -17,7 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.onRefresh = { [weak self] in self?.forceRefresh() }
-        model.onLogin = { [weak self] site in self?.loginBailian(site: site) }
         model.onOpenURL = { NSWorkspace.shared.open($0) }
         model.onOpenDataDir = { NSWorkspace.shared.open(URL(fileURLWithPath: DaemonManager.cacheDir)) }
         model.onToggleLoginItem = { [weak self] in self?.toggleLoginItem() }
@@ -263,24 +262,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - 动作
 
-    private func loginBailian(site: String) {
-        guard !model.loggingIn else { return }
-        model.loggingIn = true
-        daemon.login(provider: "bailian", site: site) { [weak self] failure in
-            guard let self else { return }
-            self.model.loggingIn = false
-            if let failure {
-                let alert = NSAlert()
-                alert.messageText = "百炼登录失败"
-                alert.informativeText = failure
-                alert.runModal()
-                self.refresh()
-            } else {
-                self.forceRefresh()
-            }
-        }
-    }
-
     private func loadProviders() {
         daemon.listProviders { [weak self] list in
             guard let self else { return }
@@ -289,7 +270,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    // 开关服务：需要 API Key 的先弹窗输入并验证；依赖工具缺失的提示安装，装不上则保持关闭。
+    // 开关服务：需要 API Key 的先弹窗输入并验证。
     private func setEnabled(_ name: String, _ enabled: Bool) {
         guard model.togglingProvider == nil else { return }
         guard enabled else {
@@ -306,31 +287,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             apiKey = key
         }
         begin(name, apiKey == nil ? "正在检查…" : "正在验证 API Key…")
-        daemon.enable(provider: name, apiKey: apiKey) { [weak self] result in
+        daemon.enable(provider: name, apiKey: apiKey) { [weak self] failure in
             guard let self else { return }
-            switch result {
-            case .ok:
-                self.finish(nil)
-            case .failed(let msg):
-                self.finish((apiKey == nil ? "开启服务失败" : "API Key 验证失败", msg))
-            case .notInstalled(let msg):
-                guard info?.installable == true, Self.confirmInstall(name, msg) else {
-                    return self.finish(nil, reload: false)
-                }
-                self.model.busyText = "正在安装，可能需要一两分钟…"
-                self.daemon.install(provider: name) { failure in
-                    if let failure {
-                        return self.finish(("安装失败，服务未开启", failure + "\n\n也可以在终端手动执行 npm install -g bailian-cli，装好后再打开开关。"))
-                    }
-                    self.model.busyText = "安装完成，正在开启…"
-                    self.daemon.enable(provider: name, apiKey: nil) { result in
-                        switch result {
-                        case .ok: self.finish(nil)
-                        case .failed(let m), .notInstalled(let m): self.finish(("开启服务失败", m))
-                        }
-                    }
-                }
-            }
+            self.finish(failure.map { (apiKey == nil ? "开启服务失败" : "API Key 验证失败", $0) })
         }
     }
 
@@ -358,7 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    private func finish(_ failure: (title: String, message: String)?, reload: Bool = true) {
+    private func finish(_ failure: (title: String, message: String)?) {
         model.togglingProvider = nil
         model.busyText = nil
         if let failure {
@@ -370,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             alert.runModal()
         }
         loadProviders()
-        if reload { forceRefresh() }
+        forceRefresh()
     }
 
     static func keyURL(_ provider: String) -> URL? {
@@ -405,16 +364,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 return nil
             }
         }
-    }
-
-    static func confirmInstall(_ provider: String, _ detail: String) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "需要先安装百炼命令行工具 bl"
-        alert.informativeText = "Liquoten 通过阿里云官方的 bailian-cli 查询百炼用量，本机还没有安装。\n\n点「安装」会执行 npm install -g bailian-cli（需要 Node.js 22.12 或更高版本）。装不上时服务不会开启。\n\n也可以取消后，在服务页填写阿里云 AccessKey，无需安装 bl。"
-        alert.addButton(withTitle: "安装")
-        alert.addButton(withTitle: "取消")
-        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func forceRefresh() {

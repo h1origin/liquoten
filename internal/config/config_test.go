@@ -68,6 +68,29 @@ timeout = "20s"
 	}
 }
 
+func TestLoadIgnoresLegacyCommand(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `[providers.bailian]
+command = "/legacy/path"
+access_key_id = "LTAI-test"
+access_key_secret = "secret-test"
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("残留 command 行不应导致加载失败: %v", err)
+	}
+	pc := cfg.Providers["bailian"]
+	if pc.AccessKeyID != "LTAI-test" || pc.AccessKeySecret != "secret-test" {
+		t.Fatalf("AccessKey = %q / %q", pc.AccessKeyID, pc.AccessKeySecret)
+	}
+	if !pc.IsEnabled() {
+		t.Fatal("bailian 应启用")
+	}
+}
+
 func TestAlertRemaining(t *testing.T) {
 	dir := t.TempDir()
 	for content, want := range map[string][]float64{
@@ -151,7 +174,6 @@ func TestSetEnabled(t *testing.T) {
 	content := `poll_interval = "15m"
 
 [providers.bailian]
-command = "/opt/homebrew/bin/bl"
 # api_key = "sk-xxx"
 
 # [providers.claudecode]
@@ -174,9 +196,6 @@ command = "/opt/homebrew/bin/bl"
 	}
 	if cfg.Providers["bailian"].IsEnabled() {
 		t.Fatal("bailian 应被禁用")
-	}
-	if cfg.Providers["bailian"].Command != "/opt/homebrew/bin/bl" {
-		t.Fatalf("bailian command 丢失: %q", cfg.Providers["bailian"].Command)
 	}
 	if !cfg.Providers["claudecode"].IsEnabled() {
 		t.Fatal("claudecode 应启用")
@@ -250,7 +269,7 @@ func TestSetProviderAccessKeys(t *testing.T) {
 	content := `# top comment
 [providers.bailian]
 enabled = true
-command = "/opt/homebrew/bin/bl"
+timeout = "30s"
 # keep this comment
 
 [thresholds.bailian]
@@ -272,7 +291,7 @@ command = "/opt/homebrew/bin/bl"
 	if pc.AccessKeyID != id || pc.AccessKeySecret != secret {
 		t.Fatalf("AccessKey = %q / %q", pc.AccessKeyID, pc.AccessKeySecret)
 	}
-	if !pc.IsEnabled() || pc.Command != "/opt/homebrew/bin/bl" {
+	if !pc.IsEnabled() || pc.Timeout != 30*time.Second {
 		t.Fatalf("其余配置被破坏: %+v", pc)
 	}
 
@@ -311,7 +330,7 @@ command = "/opt/homebrew/bin/bl"
 	if pc.AccessKeyID != "" || pc.AccessKeySecret != "" {
 		t.Fatalf("删除后 AccessKey 仍存在: %q / %q", pc.AccessKeyID, pc.AccessKeySecret)
 	}
-	if !pc.IsEnabled() || pc.Command != "/opt/homebrew/bin/bl" {
+	if !pc.IsEnabled() || pc.Timeout != 30*time.Second {
 		t.Fatalf("删除后其余配置被破坏: %+v", pc)
 	}
 	if got := cfg.Thresholds["bailian"]["5-hour quota"]; got != 70 {

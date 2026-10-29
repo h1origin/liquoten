@@ -2,10 +2,8 @@ package bailian
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -116,50 +114,12 @@ func TestSectionsEmptyWhenNoFields(t *testing.T) {
 	}
 }
 
-func TestQueryWithFakeCLI(t *testing.T) {
-	p := New(providers.Options{Command: filepath.Join("testdata", "fake-bl.sh")})
-	bal, err := p.Query(context.Background())
-	if err != nil {
-		t.Fatalf("Query: %v", err)
-	}
-	if bal.Provider != Name {
-		t.Fatalf("Provider = %q, want %q", bal.Provider, Name)
-	}
-	if len(bal.Sections) != 2 {
-		t.Fatalf("len(Sections) = %d, want 2", len(bal.Sections))
-	}
-	s := bal.Sections[0]
-	if s.Name != "5-hour quota" || s.UsedPct != 37.4 {
-		t.Fatalf("Sections[0] = %+v, want 5-hour quota 37.4%%", s)
-	}
-	if s.ResetAt.IsZero() {
-		t.Fatal("Sections[0].ResetAt is zero")
-	}
-	w := bal.Sections[1]
-	if w.Name != "1-week quota" || w.UsedPct != 12.1 {
-		t.Fatalf("Sections[1] = %+v, want 1-week quota 12.1%%", w)
-	}
-}
-
-func TestQueryFailsWhenCLIMissing(t *testing.T) {
-	p := New(providers.Options{Command: "definitely-not-a-real-bl-binary"})
+func TestQueryWithoutAccessKey(t *testing.T) {
+	p := New(providers.Options{})
 	_, err := p.Query(context.Background())
-	if err == nil {
-		t.Fatal("Query should fail when bl is missing")
+	if err == nil || err.Error() != "未配置阿里云 AccessKey，请在服务页填写" {
+		t.Fatalf("error = %v", err)
 	}
-}
-
-func TestLoginWithFakeCLI(t *testing.T) {
-	p := New(providers.Options{Command: filepath.Join("testdata", "fake-bl.sh")})
-	for _, site := range []string{"domestic", "international"} {
-		if err := p.Login(context.Background(), site); err != nil {
-			t.Fatalf("Login(%q): %v", site, err)
-		}
-	}
-	if err := p.Login(context.Background(), "mars"); err == nil {
-		t.Fatal("Login should reject unknown site")
-	}
-	var _ providers.Authenticator = p
 }
 
 func readFile(t *testing.T, path string) []byte {
@@ -169,47 +129,4 @@ func readFile(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return b
-}
-
-func TestPreflight(t *testing.T) {
-	orig := searchDirs
-	t.Cleanup(func() { searchDirs = orig })
-	searchDirs = func() []string { return nil }
-	t.Setenv("PATH", t.TempDir())
-
-	fake, err := filepath.Abs(filepath.Join("testdata", "fake-bl.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, err := New(providers.Options{Command: fake}).Preflight(context.Background())
-	if err != nil || got != fake {
-		t.Fatalf("Preflight = %q, %v; want %q", got, err, fake)
-	}
-
-	_, err = New(providers.Options{}).Preflight(context.Background())
-	if !errors.Is(err, providers.ErrNotInstalled) {
-		t.Fatalf("bl 缺失时应返回 ErrNotInstalled，got %v", err)
-	}
-
-	dir := t.TempDir()
-	bl := filepath.Join(dir, "bl")
-	if err := os.WriteFile(bl, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	searchDirs = func() []string { return []string{dir} }
-	got, err = New(providers.Options{}).Preflight(context.Background())
-	if err != nil || got != bl {
-		t.Fatalf("应在常见安装目录找到 bl: %q, %v", got, err)
-	}
-}
-
-func TestInstallWithoutNpm(t *testing.T) {
-	orig := searchDirs
-	t.Cleanup(func() { searchDirs = orig })
-	searchDirs = func() []string { return nil }
-	t.Setenv("PATH", t.TempDir())
-	err := New(providers.Options{}).Install(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "Node.js") {
-		t.Fatalf("没有 npm 时应提示安装 Node.js，got %v", err)
-	}
 }

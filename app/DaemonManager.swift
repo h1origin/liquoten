@@ -35,10 +35,6 @@ final class DaemonManager {
         process = nil
     }
 
-    func login(provider: String, site: String, completion: @escaping (String?) -> Void) {
-        run(["login", "-config", Self.configPath, "-site", site, provider]) { _, failure, _ in completion(failure) }
-    }
-
     func listProviders(completion: @escaping ([ProviderInfo]) -> Void) {
         run(["providers", "-config", Self.configPath]) { output, failure, _ in
             guard failure == nil,
@@ -50,23 +46,11 @@ final class DaemonManager {
         }
     }
 
-    enum EnableResult {
-        case ok
-        case notInstalled(String)
-        case failed(String)
-    }
-
-    // 与 daemon 的 exitNotInstalled 保持一致。
-    private static let exitNotInstalled: Int32 = 3
-
     // API Key 经标准输入传给 daemon，不出现在进程参数里。
-    func enable(provider: String, apiKey: String?, completion: @escaping (EnableResult) -> Void) {
+    func enable(provider: String, apiKey: String?, completion: @escaping (String?) -> Void) {
         var args = ["enable", "-config", Self.configPath]
         if apiKey != nil { args.append("-api-key-stdin") }
-        run(args + [provider], stdin: apiKey) { _, failure, status in
-            guard let failure else { return completion(.ok) }
-            completion(status == Self.exitNotInstalled ? .notInstalled(failure) : .failed(failure))
-        }
+        run(args + [provider], stdin: apiKey) { _, failure, _ in completion(failure) }
     }
 
     func disable(provider: String, completion: @escaping (String?) -> Void) {
@@ -81,10 +65,6 @@ final class DaemonManager {
 
     func clearAccessKey(provider: String, completion: @escaping (String?) -> Void) {
         run(["clear-access-key", "-config", Self.configPath, provider]) { _, failure, _ in completion(failure) }
-    }
-
-    func install(provider: String, completion: @escaping (String?) -> Void) {
-        run(["install", "-config", Self.configPath, provider]) { _, failure, _ in completion(failure) }
     }
 
     private func run(_ args: [String], stdin: String? = nil, completion: @escaping (String, String?, Int32) -> Void) {
