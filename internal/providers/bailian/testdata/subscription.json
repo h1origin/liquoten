@@ -1,0 +1,18 @@
+{
+  "data": {
+    "success": true,
+    "DataV2": {
+      "data": {
+        "data": {
+          "instanceCode": "sfm_tokenplansolo_public_cn-test",
+          "specCode": "standard",
+          "remainingDays": 15,
+          "startTime": 1786610148000,
+          "endTime": 1794614400000,
+          "autoRenewFlag": false,
+          "status": "VALID"
+        }
+      }
+    }
+  }
+}

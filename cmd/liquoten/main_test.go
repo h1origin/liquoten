@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/h1origin/liquoten/internal/config"
+	"github.com/h1origin/liquoten/internal/providers"
 )
 
 func TestManageProvidersAccessKeyMaintenance(t *testing.T) {
@@ -107,5 +109,46 @@ func TestSetAccessKeyRejectsUnsupportedProvider(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 		t.Fatalf("不支持时应保持配置不变: %v", statErr)
+	}
+}
+
+type plainTestProvider struct{}
+
+func (plainTestProvider) Name() string { return "plain" }
+
+func (plainTestProvider) Query(context.Context) (providers.Balance, error) {
+	return providers.Balance{}, nil
+}
+
+type scheduledTestProvider struct {
+	interval time.Duration
+}
+
+func (scheduledTestProvider) Name() string { return "scheduled" }
+
+func (scheduledTestProvider) Query(context.Context) (providers.Balance, error) {
+	return providers.Balance{}, nil
+}
+
+func (p scheduledTestProvider) PollInterval() time.Duration { return p.interval }
+
+func TestEveryInterval(t *testing.T) {
+	base := time.Minute
+	cases := []struct {
+		name string
+		p    providers.Provider
+		want time.Duration
+	}{
+		{"plain", plainTestProvider{}, time.Minute},
+		{"longer than base", scheduledTestProvider{interval: 5 * time.Minute}, 5 * time.Minute},
+		{"shorter than base", scheduledTestProvider{interval: 30 * time.Second}, 30 * time.Second},
+		{"zero", scheduledTestProvider{}, time.Minute},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := everyInterval(c.p, base); got != c.want {
+				t.Fatalf("everyInterval = %v, want %v", got, c.want)
+			}
+		})
 	}
 }

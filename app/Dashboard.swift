@@ -206,7 +206,7 @@ enum Style {
 
     static func providerDescription(_ provider: String) -> String {
         switch provider {
-        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量。建议使用只授予百炼权限的 RAM 子账号。"
+        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量（每 10 分钟）、额度补充和套餐到期时间（每 12 小时）。建议使用只授予百炼权限的 RAM 子账号。"
         case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
         case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额，并用 Codex 的登录状态每小时校正一次、每 12 小时查询一次重置卡。无需额外配置。"
         case "qoder": return "用个人访问令牌查询 qoder.com 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key。"
@@ -373,7 +373,7 @@ struct SectionCard: View {
                     Text(chartLabel)
                     Spacer(minLength: 4)
                     if let reset = section.resetAt, reset > now {
-                        Text(resetLabel(reset) + " 重置")
+                        Text(resetLabel(reset) + " " + expiryWord)
                     }
                 }
                 .font(.caption2)
@@ -454,13 +454,17 @@ struct SectionCard: View {
         return f.string(from: reset)
     }
 
+    private var expiryWord: String {
+        section.name == "addon-credits" ? "到期" : "重置"
+    }
+
     private var footer: String {
         var parts: [String] = []
         if section.usedPct >= 0 {
             parts.append("剩余 \(Int((100 - section.usedPct).rounded()))%")
         }
         if let reset = section.resetAt, reset > now {
-            parts.append(Style.countdown(to: reset, now: now))
+            parts.append(Style.countdown(to: reset, now: now).replacingOccurrences(of: "重置", with: expiryWord))
         }
         return parts.isEmpty ? " " : parts.joined(separator: " · ")
     }
@@ -476,11 +480,19 @@ struct ProviderHeader: View {
             Text(Style.providerTitle(provider)).font(.callout.weight(.semibold)).foregroundStyle(.secondary)
             Spacer(minLength: 4)
             ForEach(extras, id: \.name) { e in
-                Chip(text: "\(AppDelegate.sectionTitle(e.name)) \(e.remaining.formatted(.number.precision(.fractionLength(0...2))))")
+                Chip(text: chipText(e))
                     .fixedSize()
             }
         }
         .padding(.top, 2)
+    }
+
+    private func chipText(_ section: SectionState) -> String {
+        let value = section.remaining.formatted(.number.precision(.fractionLength(0...2)))
+        if section.name == "subscription" {
+            return "\(AppDelegate.sectionTitle(section.name)) \(value) 天"
+        }
+        return "\(AppDelegate.sectionTitle(section.name)) \(value)"
     }
 }
 

@@ -122,6 +122,14 @@ func TestQueryWithoutAccessKey(t *testing.T) {
 	}
 }
 
+func TestPollInterval(t *testing.T) {
+	p := New(providers.Options{})
+	if got := p.PollInterval(); got != 10*time.Minute {
+		t.Fatalf("PollInterval = %v, want 10m", got)
+	}
+	var _ providers.Scheduled = p
+}
+
 func readFile(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)

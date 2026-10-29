@@ -88,6 +88,8 @@ const maxConsecutiveFailures = 3
 
 const resetCreditsAlertWindow = 12 * time.Hour
 
+const expiryAlertWindow = 3 * 24 * time.Hour
+
 // New 构造引擎。remaining 是剩余百分比提醒点；cacheDir 用于持久化告警状态；notify 为 nil 时静默（测试用）。
 func New(thresholds map[string]map[string]float64, remaining []float64, cacheDir string, notify Notifier) (*Engine, error) {
 	e := &Engine{
@@ -125,11 +127,21 @@ func (e *Engine) Check(balances []providers.Balance) error {
 		e.failCount[b.Provider] = 0
 
 		for _, sec := range b.Sections {
-			if sec.Name == "reset-credits" {
+			switch sec.Name {
+			case "reset-credits":
 				if err := e.checkResetCredits(b.Provider, sec); err != nil && firstErr == nil {
 					firstErr = err
 				}
 				continue
+			case "subscription":
+				if err := e.checkSubscription(b.Provider, sec); err != nil && firstErr == nil {
+					firstErr = err
+				}
+				continue
+			case "addon-credits":
+				if err := e.checkAddonCredits(b.Provider, sec); err != nil && firstErr == nil {
+					firstErr = err
+				}
 			}
 			if sec.UsedPct < 0 {
 				continue
@@ -182,6 +194,42 @@ func (e *Engine) checkResetCredits(provider string, sec providers.Section) error
 	}
 	e.alerted[key] = true
 	msg := fmt.Sprintf("%s 有重置卡将于 %s 过期，可在 Codex 桌面 App 里使用", displayName(provider), e.formatTime(sec.ResetAt))
+	return e.fire("额度提醒", msg)
+}
+
+func (e *Engine) checkAddonCredits(provider string, sec providers.Section) error {
+	if sec.Remaining <= 0 || sec.ResetAt.IsZero() {
+		return nil
+	}
+	now := e.now()
+	left := sec.ResetAt.Sub(now)
+	if left <= 0 || left >= expiryAlertWindow {
+		return nil
+	}
+	key := fmt.Sprintf("%s|addon-credits-expire|%d", provider, sec.ResetAt.Unix())
+	if e.alerted[key] {
+		return nil
+	}
+	e.alerted[key] = true
+	msg := fmt.Sprintf("%s额度补充将于 %s 过期，剩余 %g Credits", displayName(provider), e.formatTime(sec.ResetAt), sec.Remaining)
+	return e.fire("额度提醒", msg)
+}
+
+func (e *Engine) checkSubscription(provider string, sec providers.Section) error {
+	if sec.ResetAt.IsZero() {
+		return nil
+	}
+	now := e.now()
+	left := sec.ResetAt.Sub(now)
+	if left <= 0 || left >= expiryAlertWindow {
+		return nil
+	}
+	key := fmt.Sprintf("%s|subscription|%d", provider, sec.ResetAt.Unix())
+	if e.alerted[key] {
+		return nil
+	}
+	e.alerted[key] = true
+	msg := fmt.Sprintf("%s Token Plan 套餐将于 %s 到期", displayName(provider), e.formatTime(sec.ResetAt))
 	return e.fire("额度提醒", msg)
 }
 
@@ -251,6 +299,10 @@ func sectionName(name string) string {
 		return "月度额度"
 	case "reset-credits":
 		return "重置卡"
+	case "addon-credits":
+		return "额度补充"
+	case "subscription":
+		return "套餐"
 	}
 	return name + " "
 }

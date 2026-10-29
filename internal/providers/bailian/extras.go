@@ -1,0 +1,107 @@
+package bailian
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"math"
+	"time"
+
+	"github.com/h1origin/liquoten/internal/providers"
+)
+
+const extrasInterval = 12 * time.Hour
+
+type addonSummaryResponse struct {
+	RemainingCredits  float64 `json:"remainingCredits"`
+	ActiveCount       int     `json:"activeCount"`
+	TotalCredits      float64 `json:"totalCredits"`
+	NearestExpireTime int64   `json:"nearestExpireTime"`
+}
+
+type subscriptionInfo struct {
+	InstanceCode  string `json:"instanceCode"`
+	SpecCode      string `json:"specCode"`
+	RemainingDays int    `json:"remainingDays"`
+	StartTime     int64  `json:"startTime"`
+	EndTime       int64  `json:"endTime"`
+	AutoRenewFlag bool   `json:"autoRenewFlag"`
+	Status        string `json:"status"`
+}
+
+func (p *Provider) refreshExtras(ctx context.Context, now time.Time) {
+	if p.lastAddonAttempt.IsZero() || now.Sub(p.lastAddonAttempt) >= extrasInterval {
+		p.refreshAddonSummary(ctx, now)
+	}
+	if p.lastSubscriptionAttempt.IsZero() || now.Sub(p.lastSubscriptionAttempt) >= extrasInterval {
+		p.refreshSubscription(ctx, now)
+	}
+}
+
+func (p *Provider) refreshAddonSummary(ctx context.Context, now time.Time) {
+	raw, err := p.queryAPI(ctx, addonSummaryAPI)
+	if err != nil {
+		p.lastAddonAttempt = now
+		log.Printf("百炼额度补充查询失败: %v", err)
+		return
+	}
+	var summary addonSummaryResponse
+	if err := json.Unmarshal(raw, &summary); err != nil {
+		p.lastAddonAttempt = now
+		log.Printf("百炼额度补充解析失败: %v", err)
+		return
+	}
+	p.lastAddonAttempt = now
+	p.addonSummary = summary
+	p.addonLoaded = true
+}
+
+func (p *Provider) refreshSubscription(ctx context.Context, now time.Time) {
+	raw, err := p.queryAPI(ctx, subscriptionAPI)
+	if err != nil {
+		p.lastSubscriptionAttempt = now
+		log.Printf("百炼套餐查询失败: %v", err)
+		return
+	}
+	var sub subscriptionInfo
+	if err := json.Unmarshal(raw, &sub); err != nil {
+		p.lastSubscriptionAttempt = now
+		log.Printf("百炼套餐解析失败: %v", err)
+		return
+	}
+	p.lastSubscriptionAttempt = now
+	p.subscription = sub
+	p.subscriptionLoaded = true
+}
+
+func (p *Provider) appendExtras(bal *providers.Balance, now time.Time) {
+	if p.addonLoaded && p.addonSummary.TotalCredits > 0 {
+		expire := epochMs(&p.addonSummary.NearestExpireTime)
+		if !expire.IsZero() && now.Before(expire) {
+			remaining := p.addonSummary.RemainingCredits
+			total := p.addonSummary.TotalCredits
+			bal.Sections = append(bal.Sections, providers.Section{
+				Name:      "addon-credits",
+				UsedPct:   (total - remaining) / total * 100,
+				Remaining: remaining,
+				ResetAt:   expire,
+			})
+		}
+	}
+	if p.subscriptionLoaded {
+		end := epochMs(&p.subscription.EndTime)
+		bal.Sections = append(bal.Sections, providers.Section{
+			Name:      "subscription",
+			UsedPct:   -1,
+			Remaining: remainingDays(now, end),
+			ResetAt:   end,
+		})
+	}
+}
+
+func remainingDays(now, end time.Time) float64 {
+	if end.IsZero() || !end.After(now) {
+		return 0
+	}
+	return math.Ceil(end.Sub(now).Hours() / 24)
+}

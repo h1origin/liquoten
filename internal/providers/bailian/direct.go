@@ -20,11 +20,13 @@ import (
 )
 
 const (
-	defaultRegion = "cn-beijing"
-	defaultSite   = "domestic"
-	acsVersion    = "2026-02-10"
-	tokenPath     = "/modelstudio/cli/generateAccessToken"
-	usageAPI      = "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage"
+	defaultRegion   = "cn-beijing"
+	defaultSite     = "domestic"
+	acsVersion      = "2026-02-10"
+	tokenPath       = "/modelstudio/cli/generateAccessToken"
+	usageAPI        = "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage"
+	addonSummaryAPI = "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/addon/summary"
+	subscriptionAPI = "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/subscription"
 )
 
 var errTokenExpired = errors.New("token 失效")
@@ -286,8 +288,8 @@ func (p *Provider) clearToken(token string) {
 	p.mu.Unlock()
 }
 
-func (p *Provider) usageParams() ([]byte, error) {
-	payload := usagePayload{API: usageAPI, V: "1.0"}
+func (p *Provider) gatewayParams(api string) ([]byte, error) {
+	payload := usagePayload{API: api, V: "1.0"}
 	payload.Data.CornerstoneParam.Protocol = "V2"
 	payload.Data.CornerstoneParam.Console = "ONE_CONSOLE"
 	payload.Data.CornerstoneParam.ProductCode = "p_efm"
@@ -296,22 +298,22 @@ func (p *Provider) usageParams() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func (p *Provider) usageEndpoint() string {
+func (p *Provider) gatewayEndpoint(api string) string {
 	host, action := gatewayFor(defaultRegion, defaultSite)
 	base := p.gatewayBaseURL
 	if base == "" {
 		base = "https://" + host
 	}
 	return strings.TrimRight(base, "/") + "/cli/api.json?action=" + url.QueryEscape(action) +
-		"&product=sfm_bailian&api=" + url.QueryEscape(usageAPI)
+		"&product=sfm_bailian&api=" + url.QueryEscape(api)
 }
 
-func (p *Provider) fetchUsage(ctx context.Context, token string) ([]byte, error) {
-	params, err := p.usageParams()
+func (p *Provider) fetchAPI(ctx context.Context, token, api string) ([]byte, error) {
+	params, err := p.gatewayParams(api)
 	if err != nil {
 		return nil, fmt.Errorf("构造请求参数失败: %w", err)
 	}
-	endpoint := p.usageEndpoint()
+	endpoint := p.gatewayEndpoint(api)
 	form := url.Values{}
 	form.Set("region", defaultRegion)
 	form.Set("params", string(params))
@@ -335,10 +337,10 @@ func (p *Provider) fetchUsage(ctx context.Context, token string) ([]byte, error)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("HTTP %s: %s", resp.Status, p.redact(truncate(string(body), 500)))
 	}
-	return parseUsageResponse(body)
+	return parseAPIResponse(body)
 }
 
-func parseUsageResponse(raw []byte) ([]byte, error) {
+func parseAPIResponse(raw []byte) ([]byte, error) {
 	var top struct {
 		Data json.RawMessage `json:"data"`
 	}
@@ -361,7 +363,7 @@ func parseUsageResponse(raw []byte) ([]byte, error) {
 		if strings.Contains(data.ErrorCode, "NotLogined") {
 			return nil, fmt.Errorf("%w: %s", errTokenExpired, data.ErrorCode)
 		}
-		return nil, fmt.Errorf("用量查询返回失败: %s", apiMessage(data.ErrorCode, "未知错误"))
+		return nil, fmt.Errorf("网关查询返回失败: %s", apiMessage(data.ErrorCode, "未知错误"))
 	}
 	if presentJSON(data.DataV2) {
 		return unwrapDataV2(data.DataV2)
@@ -395,23 +397,34 @@ func presentJSON(raw json.RawMessage) bool {
 	return len(raw) > 0 && string(raw) != "null"
 }
 
-func (p *Provider) queryDirect(ctx context.Context, bal providers.Balance) (providers.Balance, error) {
+func parseUsageResponse(raw []byte) ([]byte, error) {
+	return parseAPIResponse(raw)
+}
+
+func (p *Provider) queryAPI(ctx context.Context, api string) ([]byte, error) {
 	token, err := p.ensureToken(ctx)
 	if err != nil {
-		return bal, err
+		return nil, err
 	}
-	raw, err := p.fetchUsage(ctx, token)
+	raw, err := p.fetchAPI(ctx, token, api)
 	if errors.Is(err, errTokenExpired) {
 		p.clearToken(token)
 		token, err = p.ensureToken(ctx)
 		if err != nil {
-			return bal, fmt.Errorf("查用量时 token 失效，重新换 token 失败: %w", err)
+			return nil, fmt.Errorf("token 失效，重新换 token 失败: %w", err)
 		}
-		raw, err = p.fetchUsage(ctx, token)
+		raw, err = p.fetchAPI(ctx, token, api)
 		if err != nil {
-			return bal, fmt.Errorf("查用量失败（已重试一次）: %w", err)
+			return nil, fmt.Errorf("token 失效，重试失败: %w", err)
 		}
-	} else if err != nil {
+		return raw, nil
+	}
+	return raw, err
+}
+
+func (p *Provider) queryDirect(ctx context.Context, bal providers.Balance, now time.Time) (providers.Balance, error) {
+	raw, err := p.queryAPI(ctx, usageAPI)
+	if err != nil {
 		return bal, fmt.Errorf("查用量失败: %w", err)
 	}
 
@@ -423,5 +436,7 @@ func (p *Provider) queryDirect(ctx context.Context, bal providers.Balance) (prov
 	if len(bal.Sections) == 0 {
 		return bal, errors.New("用量响应中没有可识别的额度字段")
 	}
+	p.refreshExtras(ctx, now)
+	p.appendExtras(&bal, now)
 	return bal, nil
 }

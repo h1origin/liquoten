@@ -232,6 +232,114 @@ func TestResetCreditsExpiryAlert(t *testing.T) {
 	}
 }
 
+func TestAddonAndSubscriptionExpiryAlert(t *testing.T) {
+	dir := t.TempDir()
+	r := &recorder{}
+	now := time.Date(2026, 11, 14, 9, 0, 0, 0, time.Local)
+	e, err := New(nil, nil, dir, r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.now = func() time.Time { return now }
+	bal := func(addonExpire, subExpire time.Time) providers.Balance {
+		return providers.Balance{
+			Provider:  "bailian",
+			FetchedAt: now,
+			Sections: []providers.Section{
+				{Name: "addon-credits", UsedPct: 0, Remaining: 20000, ResetAt: addonExpire},
+				{Name: "subscription", UsedPct: -1, Remaining: 3, ResetAt: subExpire},
+			},
+		}
+	}
+
+	outside := now.Add(73 * time.Hour)
+	if err := e.Check([]providers.Balance{bal(outside, outside)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 0 {
+		t.Fatalf("fired = %v, want 0 outside 3 days", r.fired)
+	}
+
+	inside := now.Add(63 * time.Hour)
+	if err := e.Check([]providers.Balance{bal(inside, inside)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 2 {
+		t.Fatalf("fired = %v, want addon + subscription", r.fired)
+	}
+	if r.fired[0] != "额度提醒: 百炼额度补充将于 11月17日 00:00 过期，剩余 20000 Credits" {
+		t.Fatalf("addon message = %q", r.fired[0])
+	}
+	if r.fired[1] != "额度提醒: 百炼 Token Plan 套餐将于 11月17日 00:00 到期" {
+		t.Fatalf("subscription message = %q", r.fired[1])
+	}
+	if err := e.Check([]providers.Balance{bal(inside, inside)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 2 {
+		t.Fatalf("fired = %v, want no duplicates", r.fired)
+	}
+
+	e2, err := New(nil, nil, dir, r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e2.now = func() time.Time { return now }
+	if err := e2.Check([]providers.Balance{bal(inside, inside)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 2 {
+		t.Fatalf("fired = %v, want no duplicates after restart", r.fired)
+	}
+
+	other := now.Add(60 * time.Hour)
+	if err := e2.Check([]providers.Balance{bal(other, other)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 4 {
+		t.Fatalf("fired = %v, want new expiry alerts", r.fired)
+	}
+	if got := sectionName("addon-credits"); got != "额度补充" {
+		t.Fatalf("sectionName(addon-credits) = %q", got)
+	}
+	if got := sectionName("subscription"); got != "套餐" {
+		t.Fatalf("sectionName(subscription) = %q", got)
+	}
+}
+
+func TestAddonRemainingPercentageAlertStillWorks(t *testing.T) {
+	dir := t.TempDir()
+	r := &recorder{}
+	now := time.Date(2026, 11, 14, 9, 0, 0, 0, time.Local)
+	e, err := New(nil, []float64{50, 20}, dir, r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.now = func() time.Time { return now }
+	bal := providers.Balance{
+		Provider:  "bailian",
+		FetchedAt: now,
+		Sections: []providers.Section{{
+			Name:      "addon-credits",
+			UsedPct:   85,
+			Remaining: 3000,
+			ResetAt:   now.Add(10 * 24 * time.Hour),
+		}},
+	}
+	if err := e.Check([]providers.Balance{bal}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 1 || !strings.Contains(r.fired[0], "额度补充剩余不到 20%") {
+		t.Fatalf("fired = %v", r.fired)
+	}
+	if err := e.Check([]providers.Balance{bal}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 1 {
+		t.Fatalf("fired = %v, want generic threshold once", r.fired)
+	}
+}
+
 func TestFileNotifierAppendsEvents(t *testing.T) {
 	dir := t.TempDir()
 	n, err := FileNotifier(dir)

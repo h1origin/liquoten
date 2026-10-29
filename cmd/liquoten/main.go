@@ -95,10 +95,7 @@ func main() {
 
 	base := interval(cfg)
 	every := func(p providers.Provider) time.Duration {
-		if sp, ok := p.(providers.Scheduled); ok && sp.PollInterval() > 0 && sp.PollInterval() < base {
-			return sp.PollInterval()
-		}
-		return base
+		return everyInterval(p, base)
 	}
 	latest := map[string]providers.Balance{}
 	due := map[string]time.Time{}
@@ -371,6 +368,13 @@ func interval(cfg config.Config) time.Duration {
 		return cfg.PollInterval
 	}
 	return config.DefaultPollInterval
+}
+
+func everyInterval(p providers.Provider, base time.Duration) time.Duration {
+	if sp, ok := p.(providers.Scheduled); ok && sp.PollInterval() > 0 {
+		return sp.PollInterval()
+	}
+	return base
 }
 
 func providerTimeout(cfg config.Config, name string) time.Duration {

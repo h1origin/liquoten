@@ -17,6 +17,12 @@ import (
 	"github.com/h1origin/liquoten/internal/providers"
 )
 
+func skipExtras(p *Provider) {
+	now := time.Now()
+	p.lastAddonAttempt = now
+	p.lastSubscriptionAttempt = now
+}
+
 func TestSignACS3FixedVector(t *testing.T) {
 	date := time.Date(2026, 10, 29, 8, 0, 0, 0, time.UTC)
 	got := signACS3("LTAItestkeyid", "testsecret", http.MethodPost, "modelstudio.cn-beijing.aliyuncs.com",
@@ -188,6 +194,7 @@ func TestDirectQueryWithFixtures(t *testing.T) {
 			defer server.Close()
 
 			p := New(providers.Options{AccessKeyID: "LTAItestkeyid", AccessKeySecret: "testsecret"})
+			skipExtras(p)
 			p.tokenBaseURL = server.URL
 			p.gatewayBaseURL = server.URL
 			bal, err := p.Query(context.Background())
@@ -242,6 +249,7 @@ func TestNotLoginedRetry(t *testing.T) {
 	defer server.Close()
 
 	p := New(providers.Options{AccessKeyID: "LTAItestkeyid", AccessKeySecret: "testsecret"})
+	skipExtras(p)
 	p.tokenBaseURL = server.URL
 	p.gatewayBaseURL = server.URL
 	bal, err := p.Query(context.Background())
@@ -279,6 +287,7 @@ func TestNotLoginedRetriesOnlyOnce(t *testing.T) {
 	defer server.Close()
 
 	p := New(providers.Options{AccessKeyID: "LTAItestkeyid", AccessKeySecret: "testsecret"})
+	skipExtras(p)
 	p.tokenBaseURL = server.URL
 	p.gatewayBaseURL = server.URL
 	_, err := p.Query(context.Background())
@@ -319,6 +328,7 @@ func TestTokenCachedAcrossQueries(t *testing.T) {
 	defer server.Close()
 
 	p := New(providers.Options{AccessKeyID: "LTAItestkeyid", AccessKeySecret: "testsecret"})
+	skipExtras(p)
 	p.tokenBaseURL = server.URL
 	p.gatewayBaseURL = server.URL
 	for i := 0; i < 2; i++ {
@@ -351,6 +361,7 @@ func TestTokenFailureDoesNotLeakSecret(t *testing.T) {
 			defer server.Close()
 
 			p := New(providers.Options{AccessKeyID: "LTAItestkeyid", AccessKeySecret: "testsecret"})
+			skipExtras(p)
 			p.tokenBaseURL = server.URL
 			p.gatewayBaseURL = server.URL
 			_, err := p.Query(context.Background())

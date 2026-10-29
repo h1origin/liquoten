@@ -1,0 +1,15 @@
+{
+  "data": {
+    "success": true,
+    "DataV2": {
+      "data": {
+        "data": {
+          "remainingCredits": 0.0,
+          "activeCount": 0,
+          "totalCredits": 0.0,
+          "nearestExpireTime": 0
+        }
+      }
+    }
+  }
+}

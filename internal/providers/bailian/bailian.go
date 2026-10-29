@@ -20,15 +20,24 @@ const Name = "bailian"
 
 const defaultTimeout = 45 * time.Second
 
+const pollInterval = 10 * time.Minute
+
 // Provider 查询百炼 Token Plan 用量。
 type Provider struct {
-	accessKeyID     string
-	accessKeySecret string
-	timeout         time.Duration
-	tokenBaseURL    string
-	gatewayBaseURL  string
-	mu              sync.Mutex
-	token           string
+	accessKeyID             string
+	accessKeySecret         string
+	timeout                 time.Duration
+	tokenBaseURL            string
+	gatewayBaseURL          string
+	now                     func() time.Time
+	mu                      sync.Mutex
+	token                   string
+	lastAddonAttempt        time.Time
+	addonSummary            addonSummaryResponse
+	addonLoaded             bool
+	lastSubscriptionAttempt time.Time
+	subscription            subscriptionInfo
+	subscriptionLoaded      bool
 }
 
 func init() {
@@ -47,15 +56,20 @@ func New(opts providers.Options) *Provider {
 		accessKeyID:     opts.AccessKeyID,
 		accessKeySecret: opts.AccessKeySecret,
 		timeout:         timeout,
+		now:             time.Now,
 	}
 }
 
 // Name 返回注册表名称。
 func (p *Provider) Name() string { return Name }
 
+// PollInterval 返回用量轮询间隔。
+func (p *Provider) PollInterval() time.Duration { return pollInterval }
+
 // Query 查询 Token Plan 的 5 小时 / 1 周窗口用量。
 func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
-	bal := providers.Balance{Provider: Name, FetchedAt: time.Now()}
+	now := p.now()
+	bal := providers.Balance{Provider: Name, FetchedAt: now}
 
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
@@ -63,7 +77,7 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 	if !p.hasCredentials() {
 		return bal, errors.New("未配置阿里云 AccessKey，请在服务页填写")
 	}
-	return p.queryDirect(ctx, bal)
+	return p.queryDirect(ctx, bal, now)
 }
 
 func sections(tp tokenPlan) []providers.Section {
