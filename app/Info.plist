@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Liquoten</string>
+	<string>liquoten</string>
 	<key>CFBundleDisplayName</key>
-	<string>Liquoten</string>
+	<string>liquoten</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.liquoten.app</string>
 	<key>CFBundleVersion</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
-	<string>Liquoten</string>
+	<string>liquoten</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>LSMinimumSystemVersion</key>

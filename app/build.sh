@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# 打包 Liquoten.app：swiftc 编译菜单栏 App，go build 编译 daemon 放进 Resources。
+# 打包 liquoten.app：swiftc 编译菜单栏 App，go build 编译 daemon 放进 Resources。
 # 环境变量：ARCHS（默认本机架构，发版用 "arm64 x86_64" 生成通用版本）、VERSION（写入 Info.plist）。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP_NAME="Liquoten"
+APP_NAME="liquoten"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
 HOST_ARCH="$(uname -m)"

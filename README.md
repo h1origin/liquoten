@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/logo.png" width="128" alt="Liquoten logo">
+<img src="docs/logo.png" width="128" alt="liquoten logo">
 
-# Liquoten
+# liquoten
 
 **Keep an eye on your LLM subscription quotas, right from the macOS menu bar.**
 
@@ -18,7 +18,7 @@ English | [简体中文](README.zh-CN.md)
 
 </div>
 
-Liquoten shows how much of each LLM plan you have used as a water droplet in the menu bar: the less quota you have left, the lower the water. A small Go daemon reads each provider's usage from local files or read-only endpoints. It never sits in the path of your API requests.
+liquoten shows how much of each LLM plan you have used as a water droplet in the menu bar: the less quota you have left, the lower the water. A small Go daemon reads each provider's usage from local files or read-only endpoints. It never sits in the path of your API requests.
 
 ## ✨ Features
 
@@ -42,14 +42,14 @@ Liquoten shows how much of each LLM plan you have used as a water droplet in the
 
 ### Download (recommended)
 
-1. Download the latest `Liquoten-x.y.z.dmg` from [Releases](https://github.com/h1origin/liquoten/releases/latest).
-2. Open it and drag **Liquoten** into **Applications**.
+1. Download the latest `liquoten-x.y.z.dmg` from [Releases](https://github.com/h1origin/liquoten/releases/latest).
+2. Open it and drag **liquoten** into **Applications**.
 3. The app is not notarized by Apple yet, so macOS will block it the first time it opens. Allow it with either option:
    - Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**, or
    - run:
 
      ```bash
-     xattr -dr com.apple.quarantine /Applications/Liquoten.app
+     xattr -dr com.apple.quarantine /Applications/liquoten.app
      ```
 
 Requires macOS 13 Ventura or later.
@@ -60,9 +60,9 @@ Requirements: Go 1.21+ (the 1.27 toolchain is fetched automatically) and Xcode C
 
 ```bash
 git clone https://github.com/h1origin/liquoten.git && cd liquoten
-./app/build.sh                         # produces build/Liquoten.app
-mv build/Liquoten.app /Applications/
-open /Applications/Liquoten.app
+./app/build.sh                         # produces build/liquoten.app
+mv build/liquoten.app /Applications/
+open /Applications/liquoten.app
 ```
 
 ## 🏁 Quick start
@@ -74,12 +74,12 @@ open /Applications/Liquoten.app
 
 ### Claude Code
 
-Claude Code passes subscription usage to its [statusLine](https://code.claude.com/docs/en/statusline) command. Point it at Liquoten in `~/.claude/settings.json` (the Services page has a one-click **Copy** button):
+Claude Code passes subscription usage to its [statusLine](https://code.claude.com/docs/en/statusline) command. Point it at liquoten in `~/.claude/settings.json` (the Services page has a one-click **Copy** button):
 
 ```json
 "statusLine": {
   "type": "command",
-  "command": "/Applications/Liquoten.app/Contents/Resources/liquoten statusline"
+  "command": "/Applications/liquoten.app/Contents/Resources/liquoten statusline"
 }
 ```
 
@@ -87,14 +87,14 @@ Claude Code's status bar then shows something like `[Opus] 5h 23% · 周 41%`, a
 
 ### ChatGPT Codex
 
-No setup needed. Liquoten reads the latest usage from `~/.codex/sessions`.
-- **Hourly correction**: if you are signed in to Codex with ChatGPT, Liquoten also calls the read-only usage endpoint once an hour, so numbers stay current when you have not used the CLI for a while.
+No setup needed. liquoten reads the latest usage from `~/.codex/sessions`.
+- **Hourly correction**: if you are signed in to Codex with ChatGPT, liquoten also calls the read-only usage endpoint once an hour, so numbers stay current when you have not used the CLI for a while.
 - **Reset credits**: checked every 12 hours. You get a notification when one will expire within 12 hours.
-- **Login**: Liquoten only reads `~/.codex/auth.json`. It never refreshes tokens itself and never redeems reset credits.
+- **Login**: liquoten only reads `~/.codex/auth.json`. It never refreshes tokens itself and never redeems reset credits.
 
 ### Alibaba Cloud Bailian
 
-Enter an AccessKey ID and Secret on the Bailian row in **Services**. Liquoten checks the key once before saving it.
+Enter an AccessKey ID and Secret on the Bailian row in **Services**. liquoten checks the key once before saving it.
 - **Use a dedicated key**: we recommend a RAM user with Bailian permissions only.
 - **Storage**: the key is stored in plain text in `~/.config/liquoten/config.toml` (mode `0600`) and is deleted when you turn the service off.
 
@@ -126,7 +126,7 @@ notify = "app"                    # or "osascript" when running without the app
 ```
 providers ──► daemon (polls every ~1 min) ──► state.json / history.jsonl
                                          └──► notifications.jsonl (threshold crossings)
-Liquoten.app ◄── reads state.json, renders the menu bar, delivers notifications
+liquoten.app ◄── reads state.json, renders the menu bar, delivers notifications
 ```
 
 - **The daemon** is written in Go. The app starts it and restarts it if it exits. It writes results atomically, appends history (kept for 35 days), and runs a small alert state machine. Each alert fires once per threshold and is persisted across restarts.
@@ -145,7 +145,7 @@ liquoten clear-access-key <provider>
 liquoten statusline                    # Claude Code statusLine command
 ```
 
-The binary is at `/Applications/Liquoten.app/Contents/Resources/liquoten`. Flags: `-config`, `-cache-dir`.
+The binary is at `/Applications/liquoten.app/Contents/Resources/liquoten`. Flags: `-config`, `-cache-dir`.
 
 </details>
 
@@ -178,7 +178,7 @@ The app is not notarized yet. See the [installation](#-installation) steps above
 <details>
 <summary><b>No notifications</b></summary>
 
-Allow Liquoten in **System Settings → Notifications** and check that Focus mode is off. Also check that `notify` in the config is `"app"`.
+Allow liquoten in **System Settings → Notifications** and check that Focus mode is off. Also check that `notify` in the config is `"app"`.
 </details>
 
 <details>
@@ -205,7 +205,7 @@ There can be up to one poll interval of delay. Claude Code data updates only whi
 <summary><b>Uninstall</b></summary>
 
 ```bash
-osascript -e 'quit app "Liquoten"' && rm -rf /Applications/Liquoten.app
+osascript -e 'quit app "liquoten"' && rm -rf /Applications/liquoten.app
 rm -rf ~/.cache/liquoten ~/.config/liquoten
 ```
 </details>

@@ -108,7 +108,7 @@ struct DashboardView: View {
 
     @ViewBuilder private var content: some View {
         if model.daemonMissing {
-            NoticeCard(icon: "xmark.octagon", text: "daemon 缺失，请重新安装 Liquoten.app")
+            NoticeCard(icon: "xmark.octagon", text: "daemon 缺失，请重新安装 liquoten.app")
         } else if model.noneEnabled {
             Card {
                 HStack(spacing: 8) {
@@ -218,7 +218,7 @@ enum Style {
 
     static func claudeStatusLineSnippet() -> String {
         let path = Bundle.main.resourceURL?.appendingPathComponent("liquoten").path
-            ?? "/Applications/Liquoten.app/Contents/Resources/liquoten"
+            ?? "/Applications/liquoten.app/Contents/Resources/liquoten"
         return """
         "statusLine": {
           "type": "command",
@@ -659,7 +659,7 @@ struct FooterBar: View {
                     .disabled(model.checkingUpdate)
                 Text("当前版本 v\(Updater.currentVersion)")
                 Divider()
-                Button("退出 Liquoten", action: model.onQuit)
+                Button("退出 liquoten", action: model.onQuit)
             } label: {
                 Image(systemName: "gearshape")
             }
@@ -690,7 +690,7 @@ struct ServicesView: View {
             if !model.providersLoaded {
                 NoticeCard(icon: "hourglass", text: "正在读取服务列表…")
             } else if model.providers.isEmpty {
-                NoticeCard(icon: "xmark.octagon", text: "读取服务列表失败，请重新安装 Liquoten.app")
+                NoticeCard(icon: "xmark.octagon", text: "读取服务列表失败，请重新安装 liquoten.app")
             }
             ForEach(model.orderedProviders, id: \.name) { info in
                 ServiceRow(model: model, info: info)

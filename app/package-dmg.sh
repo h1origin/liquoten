@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# 生成发布用的 dmg：通用版本（Apple 芯片 + Intel）的 Liquoten.app 加“应用程序”快捷方式。
-# 用法：./app/package-dmg.sh 1.2.0  → build/Liquoten-1.2.0.dmg
+# 生成发布用的 dmg：通用版本（Apple 芯片 + Intel）的 liquoten.app 加“应用程序”快捷方式。
+# 用法：./app/package-dmg.sh 1.2.0  → build/liquoten-1.2.0.dmg
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="${1:?用法: $0 <版本号，如 1.2.0>}"
-APP_NAME="Liquoten"
+APP_NAME="liquoten"
 DMG="build/$APP_NAME-$VERSION.dmg"
 
 ARCHS="arm64 x86_64" VERSION="$VERSION" ./app/build.sh

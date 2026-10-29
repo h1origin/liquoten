@@ -3,7 +3,7 @@
 //   - [thresholds] 里按已用百分比配置的阈值作为额外提醒点
 //   - 查询连续失败 3 次告警一次，成功即复位
 //   - 已告警状态落盘，daemon 重启后不会立即重复轰炸
-//   - 通知默认写入 notifications.jsonl，由 Liquoten.app 投递系统通知
+//   - 通知默认写入 notifications.jsonl，由 liquoten.app 投递系统通知
 package alert
 
 import (
@@ -34,7 +34,7 @@ func escape(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s)
 }
 
-// Event 是写给 Liquoten.app 的通知事件（notifications.jsonl 的一行）。
+// Event 是写给 liquoten.app 的通知事件（notifications.jsonl 的一行）。
 type Event struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`

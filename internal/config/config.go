@@ -44,7 +44,7 @@ type Config struct {
 }
 
 // Default 返回内置默认配置：不启用任何 provider（由用户在配置或 App 里选择），
-// 每项额度剩余 50%、20% 时各提醒一次，通知写入 notifications.jsonl 由 Liquoten.app 投递。
+// 每项额度剩余 50%、20% 时各提醒一次，通知写入 notifications.jsonl 由 liquoten.app 投递。
 func Default() Config {
 	return Config{
 		PollInterval:   DefaultPollInterval,

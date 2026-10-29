@@ -41,7 +41,7 @@ final class Updater: NSObject, URLSessionTaskDelegate {
     func check(completion: @escaping (Result) -> Void) {
         var req = URLRequest(url: Self.releasesPage, timeoutInterval: 20)
         req.httpMethod = "HEAD"
-        req.setValue("Liquoten/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
+        req.setValue("liquoten/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
         session.dataTask(with: req) { [weak self] _, resp, err in
             let result: Result
             let http = resp as? HTTPURLResponse

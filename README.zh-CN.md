@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/logo.png" width="128" alt="Liquoten logo">
+<img src="docs/logo.png" width="128" alt="liquoten logo">
 
-# Liquoten
+# liquoten
 
 **在 macOS 菜单栏随时查看大模型订阅额度。**
 
@@ -18,7 +18,7 @@
 
 </div>
 
-Liquoten 在菜单栏用一滴水显示各个大模型套餐用了多少：剩得越少，水位越低。后台有一个很小的 Go 守护进程，从本地文件或只读接口读取各服务的用量。它不经过你的 API 请求链路。
+liquoten 在菜单栏用一滴水显示各个大模型套餐用了多少：剩得越少，水位越低。后台有一个很小的 Go 守护进程，从本地文件或只读接口读取各服务的用量。它不经过你的 API 请求链路。
 
 ## ✨ 功能
 
@@ -47,14 +47,14 @@ Liquoten 在菜单栏用一滴水显示各个大模型套餐用了多少：剩�
 
 ### 下载安装（推荐）
 
-1. 到 [Releases](https://github.com/h1origin/liquoten/releases/latest) 下载最新的 `Liquoten-x.y.z.dmg`。
-2. 打开后把 **Liquoten** 拖进「应用程序」。
+1. 到 [Releases](https://github.com/h1origin/liquoten/releases/latest) 下载最新的 `liquoten-x.y.z.dmg`。
+2. 打开后把 **liquoten** 拖进「应用程序」。
 3. 目前还没有经过苹果签名公证，第一次打开会被系统拦下。任选一种方式放行：
    - 打开「系统设置 → 隐私与安全性」，在页面下方点「仍要打开」；
    - 或在终端执行：
 
      ```bash
-     xattr -dr com.apple.quarantine /Applications/Liquoten.app
+     xattr -dr com.apple.quarantine /Applications/liquoten.app
      ```
 
 需要 macOS 13 Ventura 或更高版本。
@@ -65,9 +65,9 @@ Liquoten 在菜单栏用一滴水显示各个大模型套餐用了多少：剩�
 
 ```bash
 git clone https://github.com/h1origin/liquoten.git && cd liquoten
-./app/build.sh                         # 产出 build/Liquoten.app
-mv build/Liquoten.app /Applications/
-open /Applications/Liquoten.app
+./app/build.sh                         # 产出 build/liquoten.app
+mv build/liquoten.app /Applications/
+open /Applications/liquoten.app
 ```
 
 ## 🏁 快速开始
@@ -84,7 +84,7 @@ Claude Code 会把订阅用量传给 [statusLine](https://code.claude.com/docs/e
 ```json
 "statusLine": {
   "type": "command",
-  "command": "/Applications/Liquoten.app/Contents/Resources/liquoten statusline"
+  "command": "/Applications/liquoten.app/Contents/Resources/liquoten statusline"
 }
 ```
 
@@ -92,11 +92,11 @@ Claude Code 会把订阅用量传给 [statusLine](https://code.claude.com/docs/e
 
 ### ChatGPT Codex
 
-不需要配置，Liquoten 会读取 `~/.codex/sessions` 里最新的用量。
+不需要配置，liquoten 会读取 `~/.codex/sessions` 里最新的用量。
 
-- **实时校正**：如果你用 ChatGPT 账号登录了 Codex，Liquoten 还会每小时调用一次只读的用量接口来校正数据。这样即使几天没用 CLI，数字也是新的。
+- **实时校正**：如果你用 ChatGPT 账号登录了 Codex，liquoten 还会每小时调用一次只读的用量接口来校正数据。这样即使几天没用 CLI，数字也是新的。
 - **重置卡**：每 12 小时查一次，最近一张离过期不到 12 小时会发通知提醒。
-- **登录凭据**：Liquoten 只读取 `~/.codex/auth.json`，不会自己续期令牌，也不会使用你的重置卡。
+- **登录凭据**：liquoten 只读取 `~/.codex/auth.json`，不会自己续期令牌，也不会使用你的重置卡。
 
 ### 阿里云百炼
 
@@ -133,7 +133,7 @@ notify = "app"                    # 不运行 App 时改为 "osascript"
 ```
 各服务 ──► daemon（约每分钟轮询）──► state.json / history.jsonl
                                 └──► notifications.jsonl（额度跨过提醒点）
-Liquoten.app ◄── 读取 state.json，渲染菜单栏并投递通知
+liquoten.app ◄── 读取 state.json，渲染菜单栏并投递通知
 ```
 
 - **daemon**（Go）：
@@ -155,7 +155,7 @@ liquoten clear-access-key <provider>
 liquoten statusline                    # Claude Code 的 statusLine 命令
 ```
 
-可执行文件在 `/Applications/Liquoten.app/Contents/Resources/liquoten`，可用参数：`-config`、`-cache-dir`。
+可执行文件在 `/Applications/liquoten.app/Contents/Resources/liquoten`，可用参数：`-config`、`-cache-dir`。
 
 </details>
 
@@ -188,7 +188,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.liquoten.plist
 <details>
 <summary><b>收不到通知</b></summary>
 
-- 在「系统设置 → 通知」里允许 Liquoten，并确认勿扰模式没开。
+- 在「系统设置 → 通知」里允许 liquoten，并确认勿扰模式没开。
 - 检查配置里 `notify` 是否是 `"app"`。
 </details>
 
@@ -219,7 +219,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.liquoten.plist
 <summary><b>卸载</b></summary>
 
 ```bash
-osascript -e 'quit app "Liquoten"' && rm -rf /Applications/Liquoten.app
+osascript -e 'quit app "liquoten"' && rm -rf /Applications/liquoten.app
 rm -rf ~/.cache/liquoten ~/.config/liquoten
 ```
 </details>

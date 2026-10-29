@@ -78,7 +78,7 @@ final class DaemonManager {
 
     private func run(_ args: [String], stdin: String? = nil, completion: @escaping (String, String?, Int32) -> Void) {
         guard let bin = binaryURL, !isMissing else {
-            completion("", "daemon 缺失，请重新安装 Liquoten.app", -1)
+            completion("", "daemon 缺失，请重新安装 liquoten.app", -1)
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {

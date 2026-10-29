@@ -1,5 +1,5 @@
 // liquoten daemon：定时轮询各 provider 的额度，写缓存、记历史、发告警。
-// 由 Liquoten.app 或 launchd 常驻运行；菜单栏只读它写出的 state.json。
+// 由 liquoten.app 或 launchd 常驻运行；菜单栏只读它写出的 state.json。
 //
 // `liquoten statusline` 子命令作为 Claude Code 的 statusLine 命令运行，
 // 把订阅用量落盘供 claudecode provider 读取。
@@ -58,7 +58,7 @@ func main() {
 
 	st := store.New(*cacheDir)
 
-	// 通知通道：默认 "app" 把告警事件写进 notifications.jsonl，由 Liquoten.app 投递系统通知；
+	// 通知通道：默认 "app" 把告警事件写进 notifications.jsonl，由 liquoten.app 投递系统通知；
 	// 设 notify = "osascript" 则退回 daemon 自己发 macOS 通知。
 	var notifier alert.Notifier
 	switch cfg.Notify {
@@ -78,7 +78,7 @@ func main() {
 
 	provs := buildProviders(cfg, *cacheDir)
 	if len(provs) == 0 {
-		log.Printf("没有启用的 provider，可在 Liquoten 面板的“服务”页或配置文件 %s 中选择", *configPath)
+		log.Printf("没有启用的 provider，可在 liquoten 面板的“服务”页或配置文件 %s 中选择", *configPath)
 		if err := st.WriteState([]providers.Balance{}); err != nil {
 			log.Printf("写缓存失败: %v", err)
 		}

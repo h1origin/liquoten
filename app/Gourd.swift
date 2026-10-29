@@ -187,7 +187,7 @@ enum Gourd {
             return true
         }
         image.isTemplate = tint == nil
-        image.accessibilityDescription = "Liquoten"
+        image.accessibilityDescription = "liquoten"
         return image
     }
 

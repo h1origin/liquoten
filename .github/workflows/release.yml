@@ -34,8 +34,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Liquoten-${{ env.VERSION }}
-          path: build/Liquoten-${{ env.VERSION }}.dmg
+          name: liquoten-${{ env.VERSION }}
+          path: build/liquoten-${{ env.VERSION }}.dmg
           retention-days: 7
 
       - name: 发布
@@ -46,13 +46,13 @@ jobs:
           cat > notes.md <<NOTES
           ## 下载安装
 
-          1. 下载下方的 \`Liquoten-${VERSION}.dmg\`，双击打开，把 Liquoten 拖进“应用程序”。
+          1. 下载下方的 \`liquoten-${VERSION}.dmg\`，双击打开，把 liquoten 拖进“应用程序”。
           2. 本版本没有经过苹果签名公证，第一次打开会提示“无法验证开发者”。任选一种方式放行：
-             - 打开“系统设置 → 隐私与安全性”，在页面下方找到 Liquoten，点“仍要打开”；
-             - 或在终端执行：\`xattr -dr com.apple.quarantine /Applications/Liquoten.app\`
+             - 打开“系统设置 → 隐私与安全性”，在页面下方找到 liquoten，点“仍要打开”；
+             - 或在终端执行：\`xattr -dr com.apple.quarantine /Applications/liquoten.app\`
           3. 打开后点菜单栏的水滴图标 → “服务”，选择要监控的服务。
 
           支持 Apple 芯片与 Intel 芯片的 Mac，需要 macOS 13 或更高版本。监控阿里云百炼需要在服务页填写阿里云 AccessKey。
           NOTES
-          gh release create "$GITHUB_REF_NAME" "build/Liquoten-${VERSION}.dmg" \
-            --title "Liquoten ${VERSION}" --notes-file notes.md
+          gh release create "$GITHUB_REF_NAME" "build/liquoten-${VERSION}.dmg" \
+            --title "liquoten ${VERSION}" --notes-file notes.md

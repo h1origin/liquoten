@@ -243,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "有新版本 v\(update.version)"
-        alert.informativeText = "当前版本 v\(Updater.currentVersion)。下载新的 dmg 后，把 Liquoten 拖进「应用程序」覆盖旧版即可。"
+        alert.informativeText = "当前版本 v\(Updater.currentVersion)。下载新的 dmg 后，把 liquoten 拖进「应用程序」覆盖旧版即可。"
         alert.addButton(withTitle: "下载")
         alert.addButton(withTitle: "稍后")
         alert.addButton(withTitle: "跳过此版本")

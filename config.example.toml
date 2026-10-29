@@ -2,11 +2,11 @@
 #
 # 说明：
 #   - 默认不启用任何 provider；出现在 [providers.xxx] 里的即启用，除非显式 enabled = false
-#   - 也可以在 Liquoten 面板的“服务”页开关，App 会改写本文件对应的 enabled 行
+#   - 也可以在 liquoten 面板的“服务”页开关，App 会改写本文件对应的 enabled 行
 #   - 百炼用量查询使用阿里云 access_key_id / access_key_secret（可在面板“服务”页填写）
 #   - alert_remaining：每项额度剩余降到这些百分比时各提醒一次（默认 50% 和 20%），[] 关闭
 #   - thresholds 按 provider -> section 名配置已用百分比，作为额外提醒点（可选）
-#   - notify = "app"（默认）把告警事件写入缓存目录，由 Liquoten.app 投递系统通知；
+#   - notify = "app"（默认）把告警事件写入缓存目录，由 liquoten.app 投递系统通知；
 #     notify = "osascript" 则由 daemon 直接用 macOS 通知（无 App 时的回退方案）
 
 poll_interval = "1m"
