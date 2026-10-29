@@ -1,5 +1,5 @@
 // Package store 负责把轮询结果落盘：
-//   - state.json：原子写入的最新快照，SwiftBar 插件只读这个文件
+//   - state.json：原子写入的最新快照，liquoten.app 只读这个文件
 //   - history.jsonl：每次轮询追加一行，为后续趋势分析/看板留数据
 //
 // v1 用 JSONL 而非 SQLite：只在读数变化时追加（不变则 15 分钟一条心跳），规模小，

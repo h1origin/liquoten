@@ -129,8 +129,6 @@ notify = "app"                    # 不运行 App 时改为 "osascript"
 
 ## 🔧 工作原理
 
-<p align="center"><img src="docs/liquoten-architecture.png" alt="架构图" width="720"></p>
-
 ```
 各服务 ──► daemon（约每分钟轮询）──► state.json / history.jsonl
                                 └──► notifications.jsonl（额度跨过提醒点）
@@ -157,24 +155,6 @@ liquoten statusline                    # Claude Code 的 statusLine 命令
 ```
 
 可执行文件在 `/Applications/liquoten.app/Contents/Resources/liquoten`，可用参数：`-config`、`-cache-dir`。
-
-</details>
-
-<details>
-<summary><b>不运行 App（SwiftBar + launchd）</b></summary>
-
-```bash
-brew install --cask swiftbar
-go build -o ~/.local/bin/liquoten ./cmd/liquoten
-go build -o ~/.local/bin/liquoten-bar ./swiftbar
-ln -s ~/.local/bin/liquoten-bar "$SWIFTBAR_PLUGIN_DIR/liquoten.15m.sh"
-
-sed -i '' "s|/Users/lk|$HOME|g" launchd/com.liquoten.plist
-cp launchd/com.liquoten.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.liquoten.plist
-```
-
-记得设置 `notify = "osascript"`，让 daemon 自己发通知。
 
 </details>
 

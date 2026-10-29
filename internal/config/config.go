@@ -124,10 +124,6 @@ func DefaultPath() string {
 	return home + "/.config/liquoten/config.toml"
 }
 
-func SetEnabled(path, name string, enabled bool) error {
-	return SetProvider(path, name, ProviderUpdate{Enabled: &enabled})
-}
-
 // ProviderUpdate 描述对 [providers.<name>] 的改写：非 nil 字段写入，Delete 中的键删除。
 type ProviderUpdate struct {
 	Enabled         *bool

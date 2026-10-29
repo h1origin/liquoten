@@ -80,10 +80,6 @@ final class DashboardModel: ObservableObject {
     var lastUpdated: Date? {
         balances.compactMap(\.fetchedAt).max()
     }
-
-    var hasBailian: Bool {
-        balances.contains { $0.provider == "bailian" }
-    }
 }
 
 struct DashboardView: View {

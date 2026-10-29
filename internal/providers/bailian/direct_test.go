@@ -418,7 +418,7 @@ func TestParseUsageResponseFallbacks(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			raw, err := parseUsageResponse([]byte(c.raw))
+			raw, err := parseAPIResponse([]byte(c.raw))
 			if err != nil {
 				t.Fatalf("parseUsageResponse: %v", err)
 			}

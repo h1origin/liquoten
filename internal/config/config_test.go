@@ -160,7 +160,7 @@ func TestInvalidTOML(t *testing.T) {
 func TestSetEnabled(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.toml")
 
-	if err := SetEnabled(path, "claudecode", true); err != nil {
+	if err := setEnabled(path, "claudecode", true); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load(path)
@@ -184,10 +184,10 @@ func TestSetEnabled(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetEnabled(path, "bailian", false); err != nil {
+	if err := setEnabled(path, "bailian", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := SetEnabled(path, "claudecode", true); err != nil {
+	if err := setEnabled(path, "claudecode", true); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = Load(path)
@@ -204,7 +204,7 @@ func TestSetEnabled(t *testing.T) {
 		t.Fatalf("阈值被破坏: %v", got)
 	}
 
-	if err := SetEnabled(path, "bailian", true); err != nil {
+	if err := setEnabled(path, "bailian", true); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
@@ -347,4 +347,8 @@ timeout = "30s"
 	if !strings.Contains(text, "# keep this comment") {
 		t.Fatalf("删除后注释应保留:\n%s", text)
 	}
+}
+
+func setEnabled(path, name string, enabled bool) error {
+	return SetProvider(path, name, ProviderUpdate{Enabled: &enabled})
 }

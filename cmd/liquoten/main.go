@@ -1,5 +1,5 @@
 // liquoten daemon：定时轮询各 provider 的额度，写缓存、记历史、发告警。
-// 由 liquoten.app 或 launchd 常驻运行；菜单栏只读它写出的 state.json。
+// 由 liquoten.app 作为子进程常驻运行；菜单栏只读它写出的 state.json。
 //
 // `liquoten statusline` 子命令作为 Claude Code 的 statusLine 命令运行，
 // 把订阅用量落盘供 claudecode provider 读取。

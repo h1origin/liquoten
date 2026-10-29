@@ -397,10 +397,6 @@ func presentJSON(raw json.RawMessage) bool {
 	return len(raw) > 0 && string(raw) != "null"
 }
 
-func parseUsageResponse(raw []byte) ([]byte, error) {
-	return parseAPIResponse(raw)
-}
-
 func (p *Provider) queryAPI(ctx context.Context, api string) ([]byte, error) {
 	token, err := p.ensureToken(ctx)
 	if err != nil {

@@ -122,8 +122,6 @@ notify = "app"                    # or "osascript" when running without the app
 
 ## 🔧 How it works
 
-<p align="center"><img src="docs/liquoten-architecture.png" alt="Architecture" width="720"></p>
-
 ```
 providers ──► daemon (polls every ~1 min) ──► state.json / history.jsonl
                                          └──► notifications.jsonl (threshold crossings)
@@ -147,24 +145,6 @@ liquoten statusline                    # Claude Code statusLine command
 ```
 
 The binary is at `/Applications/liquoten.app/Contents/Resources/liquoten`. Flags: `-config`, `-cache-dir`.
-
-</details>
-
-<details>
-<summary><b>Running without the app (SwiftBar + launchd)</b></summary>
-
-```bash
-brew install --cask swiftbar
-go build -o ~/.local/bin/liquoten ./cmd/liquoten
-go build -o ~/.local/bin/liquoten-bar ./swiftbar
-ln -s ~/.local/bin/liquoten-bar "$SWIFTBAR_PLUGIN_DIR/liquoten.15m.sh"
-
-sed -i '' "s|/Users/lk|$HOME|g" launchd/com.liquoten.plist
-cp launchd/com.liquoten.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.liquoten.plist
-```
-
-Set `notify = "osascript"` so the daemon sends notifications itself.
 
 </details>
 
