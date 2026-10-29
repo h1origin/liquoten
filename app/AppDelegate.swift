@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - 生命周期
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        model.onRefresh = { [weak self] in self?.forceRefresh() }
+        model.onRefresh = { [weak self] in self?.refreshNow() }
         model.onOpenURL = { NSWorkspace.shared.open($0) }
         model.onOpenDataDir = { NSWorkspace.shared.open(URL(fileURLWithPath: DaemonManager.cacheDir)) }
         model.onToggleLoginItem = { [weak self] in self?.toggleLoginItem() }
@@ -62,15 +62,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // MARK: - 刷新
 
-    private func refresh() {
+    private func refresh(completion: (() -> Void)? = nil) {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let balances = StateReader.read() ?? []
             let history = HistoryReader.read(since: Date().addingTimeInterval(-35 * 86400))
             self?.notifier.consume()
             DispatchQueue.main.async {
-                self?.balances = balances
-                self?.model.history = history
-                self?.rebuildUI()
+                guard let self else {
+                    completion?()
+                    return
+                }
+                self.balances = balances
+                self.model.history = history
+                self.rebuildUI()
+                completion?()
             }
         }
     }
@@ -332,7 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             alert.runModal()
         }
         loadProviders()
-        forceRefresh()
+        restartDaemon()
     }
 
     static func keyURL(_ provider: String) -> URL? {
@@ -369,7 +374,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    private func forceRefresh() {
+    private func refreshNow() {
+        guard !model.refreshing else { return }
+        model.refreshing = true
+        daemon.refreshNow()
+        refresh()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            self?.refresh {
+                self?.model.refreshing = false
+            }
+        }
+    }
+
+    private func restartDaemon() {
         daemon.restart()
         refresh()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.refresh() }

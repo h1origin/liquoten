@@ -15,10 +15,12 @@ import (
 	"log"
 	"math/rand/v2"
 	"os"
+	"os/signal"
 	"reflect"
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/h1origin/liquoten/internal/alert"
@@ -158,6 +160,11 @@ func main() {
 		}
 	}
 
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGUSR1)
+	defer signal.Stop(sigCh)
+	var lastSignalPoll time.Time
+
 	poll(time.Now())
 	if *once {
 		return
@@ -170,8 +177,27 @@ func main() {
 				next = t
 			}
 		}
-		time.Sleep(time.Until(next))
-		poll(time.Now())
+		timer := time.NewTimer(time.Until(next))
+		select {
+		case <-timer.C:
+			poll(time.Now())
+		case <-sigCh:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			now := time.Now()
+			if !refreshSignalAllowed(lastSignalPoll, now) {
+				log.Printf("忽略 10 秒内的重复刷新信号")
+				continue
+			}
+			lastSignalPoll = now
+			log.Printf("收到 SIGUSR1，立即刷新")
+			handleRefreshSignal(provs, due, now)
+			poll(now)
+		}
 	}
 }
 
@@ -375,6 +401,21 @@ func everyInterval(p providers.Provider, base time.Duration) time.Duration {
 		return sp.PollInterval()
 	}
 	return base
+}
+
+const refreshSignalDebounce = 10 * time.Second
+
+func refreshSignalAllowed(last, now time.Time) bool {
+	return last.IsZero() || now.Sub(last) >= refreshSignalDebounce
+}
+
+func handleRefreshSignal(provs []providers.Provider, due map[string]time.Time, now time.Time) {
+	for _, p := range provs {
+		if r, ok := p.(providers.Refresher); ok {
+			r.RefreshNow()
+		}
+		due[p.Name()] = now
+	}
 }
 
 func providerTimeout(cfg config.Config, name string) time.Duration {

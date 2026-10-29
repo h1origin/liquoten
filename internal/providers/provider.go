@@ -39,6 +39,11 @@ type Scheduled interface {
 	PollInterval() time.Duration
 }
 
+// Refresher 由带长周期缓存的 provider 实现；RefreshNow 让下一次 Query 忽略这些缓存的间隔，立即重新请求。
+type Refresher interface {
+	RefreshNow()
+}
+
 // KeyRequired 由必须填写 API Key 才能查询的 provider 实现。
 type KeyRequired interface {
 	RequiresAPIKey() bool

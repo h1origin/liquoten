@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 // DaemonManager 负责把 app bundle 内的 liquoten daemon 作为子进程拉起，
@@ -20,7 +21,7 @@ final class DaemonManager {
         spawn()
     }
 
-    // 立即刷新 = 重启 daemon（daemon 启动即先轮询一次）。
+    // 重启 daemon（重新读取配置；daemon 启动即先轮询一次）。
     func restart() {
         let old = process
         process = nil
@@ -33,6 +34,14 @@ final class DaemonManager {
         quitting = true
         process?.terminate()
         process = nil
+    }
+
+    func refreshNow() {
+        if let process, process.isRunning {
+            _ = kill(process.processIdentifier, SIGUSR1)
+        } else {
+            spawn()
+        }
     }
 
     func listProviders(completion: @escaping ([ProviderInfo]) -> Void) {

@@ -63,7 +63,7 @@ Section{Name: "addon-credits", UsedPct: (total-remaining)/total*100, Remaining: 
 Section{Name: "subscription", UsedPct: -1, Remaining: <剩余天数>, ResetAt: endTime}
 ```
 
-- 剩余天数按当前时间和 `endTime` 现算（向上取整，不小于 0），不要直接用接口的 `remainingDays`（它只在查询那一刻准确）。
+- 剩余天数按当前时间和 `endTime` 现算（向下取整，不小于 0），不要直接用接口的 `remainingDays`（它只在查询那一刻准确）。
 - `UsedPct < 0 && Remaining >= 0`，会作为 Chip 显示在百炼标题行，形如 `套餐剩余 15 天`（标题见第 6 点）。
 
 ### 4. 轮询间隔（`cmd/liquoten/main.go`）
@@ -98,7 +98,7 @@ Section{Name: "subscription", UsedPct: -1, Remaining: <剩余天数>, ResetAt: e
 - 两个新接口的 fixture 解析；请求里 `params` 的 `Api` 正确；只会请求三个允许的 Api。
 - 12 小时频率：12 小时内多次 Query 只请求一次；时间推进后再请求；失败后 12 小时内不重试；失败时 Query 仍返回用量。
 - `addon-credits` 的 UsedPct / Remaining / ResetAt 正确；total 为 0 或过期后不追加。
-- `subscription` 剩余天数随 now 变化正确（向上取整、过期为 0）。
+- `subscription` 剩余天数随 now 变化正确（向下取整、过期为 0）。
 - `PollInterval()` 为 10 分钟；main 的 `every` 新规则。
 - alert：额度补充和套餐到期在 3 天外不提醒、3 天内提醒一次、重复 Check 和重建 Engine 不重复、换一个到期时间再提醒；
   额度补充的剩余百分比提醒仍然照常触发。

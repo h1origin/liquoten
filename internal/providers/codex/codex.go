@@ -77,7 +77,10 @@ type liveUsageResponse struct {
 		Primary   *liveWindow `json:"primary_window"`
 		Secondary *liveWindow `json:"secondary_window"`
 	} `json:"rate_limit"`
-	Credits *credits `json:"credits"`
+	Credits      *credits `json:"credits"`
+	ResetCredits struct {
+		AvailableCount *int `json:"available_count"`
+	} `json:"rate_limit_reset_credits"`
 }
 
 type liveWindow struct {
@@ -131,6 +134,11 @@ func newProvider(home string, timeout time.Duration) *Provider {
 }
 
 func (p *Provider) Name() string { return Name }
+
+func (p *Provider) RefreshNow() {
+	p.lastUsageAttempt = time.Time{}
+	p.lastResetAttempt = time.Time{}
+}
 
 func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 	now := p.now()
@@ -260,6 +268,12 @@ func (p *Provider) refreshLiveUsage(ctx context.Context, now time.Time) {
 	p.lastUsageAttempt = now
 	p.liveUsage = usage.rateLimits()
 	p.liveUsageAt = now
+	if usage.ResetCredits.AvailableCount != nil && p.resetCreditsLoaded {
+		count, _ := availableResetCredits(p.resetCredits, now)
+		if *usage.ResetCredits.AvailableCount != count {
+			p.lastResetAttempt = time.Time{}
+		}
+	}
 }
 
 func (p *Provider) refreshResetCredits(ctx context.Context, now time.Time) {

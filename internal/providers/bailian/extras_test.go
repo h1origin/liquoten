@@ -103,7 +103,7 @@ func TestAddonAndSubscriptionSections(t *testing.T) {
 		t.Fatalf("addon = %+v", addon)
 	}
 	sub := section(t, bal.Sections, "subscription")
-	if sub.UsedPct != -1 || sub.Remaining != 13 || !sub.ResetAt.Equal(time.UnixMilli(1794614400000)) {
+	if sub.UsedPct != -1 || sub.Remaining != 12 || !sub.ResetAt.Equal(time.UnixMilli(1794614400000)) {
 		t.Fatalf("subscription = %+v", sub)
 	}
 
@@ -315,13 +315,31 @@ func TestRemainingDays(t *testing.T) {
 	}{
 		{time.Time{}, 0},
 		{now.Add(-time.Second), 0},
-		{now.Add(12 * time.Hour), 1},
+		{now.Add(12 * time.Hour), 0},
+		{now.Add(23 * time.Hour), 0},
+		{now.Add(24 * time.Hour), 1},
 		{now.Add(48 * time.Hour), 2},
-		{now.Add(49 * time.Hour), 3},
+		{now.Add(49 * time.Hour), 2},
 	}
 	for _, c := range cases {
 		if got := remainingDays(now, c.end); got != c.want {
 			t.Errorf("remainingDays(%v) = %v, want %v", c.end, got, c.want)
 		}
 	}
+}
+
+func TestRefreshNowClearsExtrasAttempts(t *testing.T) {
+	p := New(providers.Options{AccessKeyID: "LTAI-test", AccessKeySecret: "secret-test"})
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	p.token = "token-1"
+	p.lastAddonAttempt = now
+	p.lastSubscriptionAttempt = now
+	p.RefreshNow()
+	if !p.lastAddonAttempt.IsZero() || !p.lastSubscriptionAttempt.IsZero() {
+		t.Fatalf("attempts = %v / %v, want zero", p.lastAddonAttempt, p.lastSubscriptionAttempt)
+	}
+	if p.token != "token-1" {
+		t.Fatalf("RefreshNow should not clear token")
+	}
+	var _ providers.Refresher = p
 }

@@ -29,6 +29,11 @@ type subscriptionInfo struct {
 	Status        string `json:"status"`
 }
 
+func (p *Provider) RefreshNow() {
+	p.lastAddonAttempt = time.Time{}
+	p.lastSubscriptionAttempt = time.Time{}
+}
+
 func (p *Provider) refreshExtras(ctx context.Context, now time.Time) {
 	if p.lastAddonAttempt.IsZero() || now.Sub(p.lastAddonAttempt) >= extrasInterval {
 		p.refreshAddonSummary(ctx, now)
@@ -103,5 +108,5 @@ func remainingDays(now, end time.Time) float64 {
 	if end.IsZero() || !end.After(now) {
 		return 0
 	}
-	return math.Ceil(end.Sub(now).Hours() / 24)
+	return math.Floor(end.Sub(now).Hours() / 24)
 }

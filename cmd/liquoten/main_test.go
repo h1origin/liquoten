@@ -152,3 +152,55 @@ func TestEveryInterval(t *testing.T) {
 		})
 	}
 }
+
+type refreshingTestProvider struct {
+	refreshed int
+}
+
+func (*refreshingTestProvider) Name() string { return "refreshing" }
+
+func (*refreshingTestProvider) Query(context.Context) (providers.Balance, error) {
+	return providers.Balance{}, nil
+}
+
+func (p *refreshingTestProvider) RefreshNow() { p.refreshed++ }
+
+func TestHandleRefreshSignal(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	refresher := &refreshingTestProvider{}
+	provs := []providers.Provider{plainTestProvider{}, refresher}
+	due := map[string]time.Time{
+		"plain":      now.Add(time.Hour),
+		"refreshing": now.Add(time.Hour),
+	}
+	handleRefreshSignal(provs, due, now)
+	if refresher.refreshed != 1 {
+		t.Fatalf("refreshed = %d, want 1", refresher.refreshed)
+	}
+	for _, p := range provs {
+		if got := due[p.Name()]; !got.Equal(now) {
+			t.Fatalf("due[%s] = %v, want %v", p.Name(), got, now)
+		}
+	}
+}
+
+func TestRefreshSignalAllowed(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		last time.Time
+		want bool
+	}{
+		{"first", time.Time{}, true},
+		{"within 10s", now.Add(-9 * time.Second), false},
+		{"exactly 10s", now.Add(-10 * time.Second), true},
+		{"after 10s", now.Add(-11 * time.Second), true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := refreshSignalAllowed(c.last, now); got != c.want {
+				t.Fatalf("refreshSignalAllowed = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

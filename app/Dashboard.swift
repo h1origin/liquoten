@@ -15,6 +15,7 @@ final class DashboardModel: ObservableObject {
     @Published var order: [String] = UserDefaults.standard.stringArray(forKey: "providerOrder") ?? []
     @Published var draggingProvider: String?
     @Published var checkingUpdate = false
+    @Published var refreshing = false
 
     var onRefresh: () -> Void = {}
     var onOpenURL: (URL) -> Void = { _ in }
@@ -315,7 +316,20 @@ struct HeaderView: View {
         let peak = model.peakUsage
         let tint = peak.map(Style.color) ?? .secondary
         VStack(alignment: .leading, spacing: 8) {
-            Text("所有额度中最高已用").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text("所有额度中最高已用").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button(action: model.onRefresh) {
+                    if model.refreshing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.refreshing)
+                .help("刷新")
+            }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "gauge.with.dots.needle.33percent")
                     .font(.title2)
@@ -615,11 +629,6 @@ struct FooterBar: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Button(action: model.onRefresh) {
-                Label("刷新", systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-
             Button { model.showingServices = true } label: {
                 Label("服务", systemImage: "square.grid.2x2")
             }

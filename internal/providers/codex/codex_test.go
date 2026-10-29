@@ -522,3 +522,71 @@ func TestLiveErrorDoesNotLeakSecrets(t *testing.T) {
 		}
 	}
 }
+
+func TestRefreshNowClearsAttempts(t *testing.T) {
+	p := newProvider(t.TempDir(), 0)
+	now := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	p.lastUsageAttempt = now
+	p.lastResetAttempt = now
+	p.RefreshNow()
+	if !p.lastUsageAttempt.IsZero() || !p.lastResetAttempt.IsZero() {
+		t.Fatalf("attempts = %v / %v, want zero", p.lastUsageAttempt, p.lastResetAttempt)
+	}
+	var _ providers.Refresher = p
+}
+
+func TestLiveUsageCorrectsResetCreditCount(t *testing.T) {
+	now := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	resetBody := testdata(t, "wham-reset-credits.json")
+	cases := []struct {
+		name       string
+		usage      string
+		resetCalls int
+	}{
+		{"count changes", "wham-usage-reset1.json", 1},
+		{"count equal", "wham-usage.json", 0},
+		{"count missing", "wham-usage-no-reset-credits.json", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			home := t.TempDir()
+			writeTestAuth(t, home, "token-1", "account-1")
+			usageBody := testdata(t, c.usage)
+			var mu sync.Mutex
+			resetCalls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				guardConsume(t, r)
+				switch r.URL.Path {
+				case usagePath:
+					w.Write(usageBody)
+				case resetCreditsPath:
+					mu.Lock()
+					resetCalls++
+					mu.Unlock()
+					w.Write(resetBody)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			p := newProvider(home, 0)
+			p.now = func() time.Time { return now }
+			p.baseURL = server.URL
+			p.resetCredits = []resetCredit{
+				{Status: "available", IsSupportedByPlan: true, ExpiresAt: now.Add(24 * time.Hour)},
+				{Status: "available", IsSupportedByPlan: true, ExpiresAt: now.Add(48 * time.Hour)},
+			}
+			p.resetCreditsLoaded = true
+			p.lastResetAttempt = now
+			if _, err := p.Query(context.Background()); err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if resetCalls != c.resetCalls {
+				t.Fatalf("reset calls = %d, want %d", resetCalls, c.resetCalls)
+			}
+		})
+	}
+}
