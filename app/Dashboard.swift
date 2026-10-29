@@ -144,14 +144,23 @@ struct DashboardView: View {
                 let balances = b.sections.filter { $0.usedPct < 0 && $0.remaining >= 0 }
                 let quotas = b.sections.filter { !($0.usedPct < 0 && $0.remaining >= 0) }
                 ProviderHeader(provider: b.provider, extras: balances)
-                let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, min(quotas.count, 2)))
-                LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(quotas, id: \.name) { s in
-                        SectionCard(provider: b.provider, section: s,
-                                    points: model.history[HistoryReader.key(b.provider, s.name)] ?? [],
-                                    now: model.now)
+                let rows = stride(from: 0, to: quotas.count, by: 2).map { start in
+                    Array(quotas[start..<min(start + 2, quotas.count)])
+                }
+                Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 10) {
+                    ForEach(rows.indices, id: \.self) { index in
+                        GridRow(alignment: .top) {
+                            ForEach(rows[index], id: \.name) { s in
+                                SectionCard(provider: b.provider, section: s,
+                                            points: model.history[HistoryReader.key(b.provider, s.name)] ?? [],
+                                            now: model.now)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                    .gridCellColumns(rows[index].count == 1 ? 2 : 1)
+                            }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -207,7 +216,7 @@ enum Style {
 
     static func providerDescription(_ provider: String) -> String {
         switch provider {
-        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量（每 30 分钟）、额度补充和套餐到期时间（每 6 小时）。建议使用只授予百炼权限的 RAM 子账号。月额度用满后额度补充改为每 30 分钟查询。"
+        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量（每 30 分钟）、加购额度和套餐到期时间（每 6 小时）。建议使用只授予百炼权限的 RAM 子账号。月额度用满后加购额度改为每次轮询查询。"
         case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
         case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额，并用 Codex 的登录状态每 30 分钟校正一次、每 6 小时查询一次重置卡。无需额外配置。"
         case "qoder": return "用个人访问令牌查询 qoder.com 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key，每 30 分钟查询一次。"
@@ -246,7 +255,7 @@ enum Style {
     static func countdown(to date: Date, now: Date) -> String {
         let secs = max(0, Int(date.timeIntervalSince(now)))
         let d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60
-        if d > 0 { return "\(d) 天 \(h) 小时后重置" }
+        if d > 0 { return "\(d) 天后重置" }
         if h > 0 { return "\(h) 小时 \(m) 分后重置" }
         return "\(m) 分钟后重置"
     }
@@ -298,12 +307,13 @@ struct Chip: View {
 
 struct Card<Content: View>: View {
     var tint: Color = .primary
+    var fillHeight = false
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) { content }
             .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: 12).fill(tint.opacity(0.07)))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(tint.opacity(0.10)))
     }
@@ -363,7 +373,7 @@ struct SectionCard: View {
     var body: some View {
         let unlimited = section.usedPct < 0
         let tint = unlimited ? Color.green : Style.color(section.usedPct)
-        Card {
+        Card(fillHeight: true) {
             HStack(spacing: 5) {
                 Circle().fill(tint).frame(width: 7, height: 7)
                 Text(AppDelegate.sectionTitle(section.name))
@@ -394,6 +404,7 @@ struct SectionCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 chart
+                Spacer(minLength: 0)
                 UsageBar(pct: section.usedPct, color: tint)
             }
             Text(footer).font(.caption).foregroundStyle(.secondary).lineLimit(1)

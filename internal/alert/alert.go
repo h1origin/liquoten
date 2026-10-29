@@ -232,7 +232,7 @@ func (e *Engine) checkAddonCredits(provider string, sec providers.Section) error
 		return nil
 	}
 	e.alerted[key] = true
-	msg := fmt.Sprintf("%s额度补充将于 %s 过期，剩余 %g Credits", displayName(provider), e.formatTime(sec.ResetAt), sec.Remaining)
+	msg := fmt.Sprintf("%s加购额度将于 %s 过期，剩余 %g Credits", displayName(provider), e.formatTime(sec.ResetAt), sec.Remaining)
 	return e.fire("额度提醒", msg)
 }
 
@@ -321,7 +321,7 @@ func sectionName(name string) string {
 	case "reset-credits":
 		return "重置卡"
 	case "addon-credits":
-		return "额度补充"
+		return "加购额度"
 	case "subscription":
 		return "套餐"
 	}

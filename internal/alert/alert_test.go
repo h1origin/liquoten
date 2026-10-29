@@ -268,7 +268,7 @@ func TestAddonAndSubscriptionExpiryAlert(t *testing.T) {
 	if len(r.fired) != 2 {
 		t.Fatalf("fired = %v, want addon + subscription", r.fired)
 	}
-	if r.fired[0] != "额度提醒: 百炼额度补充将于 11月17日 00:00 过期，剩余 20000 Credits" {
+	if r.fired[0] != "额度提醒: 百炼加购额度将于 11月17日 00:00 过期，剩余 20000 Credits" {
 		t.Fatalf("addon message = %q", r.fired[0])
 	}
 	if r.fired[1] != "额度提醒: 百炼 Token Plan 套餐将于 11月17日 00:00 到期" {
@@ -300,7 +300,7 @@ func TestAddonAndSubscriptionExpiryAlert(t *testing.T) {
 	if len(r.fired) != 4 {
 		t.Fatalf("fired = %v, want new expiry alerts", r.fired)
 	}
-	if got := sectionName("addon-credits"); got != "额度补充" {
+	if got := sectionName("addon-credits"); got != "加购额度" {
 		t.Fatalf("sectionName(addon-credits) = %q", got)
 	}
 	if got := sectionName("subscription"); got != "套餐" {
@@ -330,7 +330,7 @@ func TestAddonRemainingPercentageAlertStillWorks(t *testing.T) {
 	if err := e.Check([]providers.Balance{bal}); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.fired) != 1 || !strings.Contains(r.fired[0], "额度补充剩余不到 20%") {
+	if len(r.fired) != 1 || !strings.Contains(r.fired[0], "加购额度剩余不到 20%") {
 		t.Fatalf("fired = %v", r.fired)
 	}
 	if err := e.Check([]providers.Balance{bal}); err != nil {

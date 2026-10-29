@@ -58,13 +58,13 @@ func (p *Provider) refreshAddonSummary(ctx context.Context, now time.Time) {
 	raw, err := p.queryAPI(ctx, addonSummaryAPI)
 	if err != nil {
 		p.lastAddonAttempt = now
-		log.Printf("百炼额度补充查询失败: %v", err)
+		log.Printf("百炼加购额度查询失败: %v", err)
 		return
 	}
 	var summary addonSummaryResponse
 	if err := json.Unmarshal(raw, &summary); err != nil {
 		p.lastAddonAttempt = now
-		log.Printf("百炼额度补充解析失败: %v", err)
+		log.Printf("百炼加购额度解析失败: %v", err)
 		return
 	}
 	p.lastAddonAttempt = now
