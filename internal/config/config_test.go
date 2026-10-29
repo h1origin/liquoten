@@ -36,6 +36,8 @@ poll_interval = "10m"
 
 [providers.bailian]
 api_key = "sk-test"
+access_key_id = "LTAI-test"
+access_key_secret = "secret-test"
 timeout = "20s"
 
 [thresholds.bailian]
@@ -54,6 +56,9 @@ timeout = "20s"
 	}
 	if cfg.Providers["bailian"].APIKey != "sk-test" {
 		t.Fatalf("APIKey = %q", cfg.Providers["bailian"].APIKey)
+	}
+	if cfg.Providers["bailian"].AccessKeyID != "LTAI-test" || cfg.Providers["bailian"].AccessKeySecret != "secret-test" {
+		t.Fatalf("AccessKey = %q / %q", cfg.Providers["bailian"].AccessKeyID, cfg.Providers["bailian"].AccessKeySecret)
 	}
 	if !cfg.Providers["bailian"].IsEnabled() {
 		t.Fatal("显式出现但未设 enabled 的 provider 应默认启用")

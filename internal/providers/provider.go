@@ -65,10 +65,12 @@ type Installer interface {
 
 // Options 由 config 层填充后传给各 provider 的工厂函数。
 type Options struct {
-	APIKey  string        // 可选；留空则依赖环境变量或 CLI 自身的登录态
-	Command string        // 覆盖 provider 默认的可执行程序路径（测试/自定义安装用）
-	Timeout time.Duration // 单次查询超时；<=0 使用 provider 默认值
-	DataDir string        // daemon 缓存目录；读本地快照的 provider 使用
+	APIKey          string        // 可选；留空则依赖环境变量或 CLI 自身的登录态
+	AccessKeyID     string        // 可选；阿里云 AK ID，置空时 provider 可回退到 CLI 配置
+	AccessKeySecret string        // 可选；阿里云 AK Secret
+	Command         string        // 覆盖 provider 默认的可执行程序路径（测试/自定义安装用）
+	Timeout         time.Duration // 单次查询超时；<=0 使用 provider 默认值
+	DataDir         string        // daemon 缓存目录；读本地快照的 provider 使用
 }
 
 // Factory 构造一个 Provider。

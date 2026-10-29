@@ -247,7 +247,7 @@ func manageProviders(cmd string, args []string) error {
 		return fmt.Errorf("用法: liquoten %s [-config 路径] <provider>（可选: %s）", cmd, strings.Join(providers.Names(), ", "))
 	}
 	pc := cfg.Providers[name]
-	opts := providers.Options{APIKey: pc.APIKey, Command: pc.Command, Timeout: pc.Timeout, DataDir: store.DefaultDir()}
+	opts := providers.Options{APIKey: pc.APIKey, AccessKeyID: pc.AccessKeyID, AccessKeySecret: pc.AccessKeySecret, Command: pc.Command, Timeout: pc.Timeout, DataDir: store.DefaultDir()}
 	ctx := context.Background()
 
 	switch cmd {
@@ -320,7 +320,7 @@ func login(args []string) error {
 		return fmt.Errorf("加载配置失败 %s: %w", *configPath, err)
 	}
 	pc := cfg.Providers[name]
-	p, err := providers.New(name, providers.Options{APIKey: pc.APIKey, Command: pc.Command})
+	p, err := providers.New(name, providers.Options{APIKey: pc.APIKey, AccessKeyID: pc.AccessKeyID, AccessKeySecret: pc.AccessKeySecret, Command: pc.Command})
 	if err != nil {
 		return err
 	}
@@ -345,10 +345,12 @@ func buildProviders(cfg config.Config, dataDir string) []providers.Provider {
 			continue
 		}
 		p, err := providers.New(name, providers.Options{
-			APIKey:  pc.APIKey,
-			Command: pc.Command,
-			Timeout: pc.Timeout,
-			DataDir: dataDir,
+			APIKey:          pc.APIKey,
+			AccessKeyID:     pc.AccessKeyID,
+			AccessKeySecret: pc.AccessKeySecret,
+			Command:         pc.Command,
+			Timeout:         pc.Timeout,
+			DataDir:         dataDir,
 		})
 		if err != nil {
 			log.Printf("跳过 provider %q: %v", name, err)

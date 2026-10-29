@@ -3,8 +3,9 @@
 # 说明：
 #   - 默认不启用任何 provider；出现在 [providers.xxx] 里的即启用，除非显式 enabled = false
 #   - 也可以在 Liquoten 面板的“服务”页开关，App 会改写本文件对应的 enabled 行
-#   - 百炼用量查询依赖 `bl auth login --console` 的控制台登录态（或在菜单里点"登录百炼"）；
-#     api_key 只会以 DASHSCOPE_API_KEY 传给 bl，查不到 Token Plan 用量
+#   - 百炼用量查询有两种方式：配置阿里云 access_key_id / access_key_secret（直连），
+#     或安装官方 CLI 并执行 `bl auth login --console`（也可以在菜单里点"登录百炼"）
+#   - api_key 只会以 DASHSCOPE_API_KEY 传给 bl，查不到 Token Plan 用量
 #   - alert_remaining：每项额度剩余降到这些百分比时各提醒一次（默认 50% 和 20%），[] 关闭
 #   - thresholds 按 provider -> section 名配置已用百分比，作为额外提醒点（可选）
 #   - notify = "app"（默认）把告警事件写入缓存目录，由 Liquoten.app 投递系统通知；
@@ -16,6 +17,14 @@ poll_interval = "1m"
 
 [providers.bailian]
 enabled = true
+# 方式一（推荐）：配置阿里云 AK/SK，liquoten 直接签名查询，不需要安装 bl，
+# 也不会因为控制台 token 过期而需要重新登录。建议使用只授予百炼只读权限的
+# RAM 子账号；access_key_secret 会以明文保存在本配置文件里。
+# 没有配置时也会自动读取 ~/.bailian/config.json 里的 AK/SK（及其 console_region、
+# console_site），方便已经执行过 `bl auth login --open-api` 的用户。
+# access_key_id = "LTAI..."
+# access_key_secret = "..."
+# 方式二：不配 AK/SK，保持原行为，使用已登录的官方 CLI。
 # api_key = "sk-你的key"
 # command = "bl"        # bailian-cli 可执行文件路径（默认 PATH 里的 bl）
 # timeout = "45s"       # 单次查询超时

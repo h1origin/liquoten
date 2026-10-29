@@ -23,10 +23,12 @@ const (
 // ProviderCfg 是单个 provider 的配置。Enabled 用指针以区分"未设置"与"显式 false"：
 // 出现在配置文件中的 provider 默认为启用，除非显式 enabled = false。
 type ProviderCfg struct {
-	Enabled *bool         `toml:"enabled"`
-	APIKey  string        `toml:"api_key"`
-	Command string        `toml:"command"`
-	Timeout time.Duration `toml:"timeout"`
+	Enabled         *bool         `toml:"enabled"`
+	APIKey          string        `toml:"api_key"`
+	AccessKeyID     string        `toml:"access_key_id"`
+	AccessKeySecret string        `toml:"access_key_secret"`
+	Command         string        `toml:"command"`
+	Timeout         time.Duration `toml:"timeout"`
 }
 
 // IsEnabled 返回是否启用：未显式设置时默认启用。
@@ -91,6 +93,12 @@ func Load(path string) (Config, error) {
 		}
 		if u.APIKey != "" {
 			base.APIKey = u.APIKey
+		}
+		if u.AccessKeyID != "" {
+			base.AccessKeyID = u.AccessKeyID
+		}
+		if u.AccessKeySecret != "" {
+			base.AccessKeySecret = u.AccessKeySecret
 		}
 		if u.Command != "" {
 			base.Command = u.Command

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "success": true,
+    "DataV2": {
+      "data": {
+        "data": {
+          "per5HourPercentage": 0.42,
+          "per5HourResetTime": 1768104000000,
+          "per1WeekPercentage": 0.18,
+          "per1WeekResetTime": 1768363200000
+        }
+      }
+    }
+  }
+}

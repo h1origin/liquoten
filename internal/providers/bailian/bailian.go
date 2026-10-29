@@ -1,7 +1,8 @@
 // Package bailian 实现阿里云百炼(Token Plan)额度查询。
 //
-// 通过执行官方开源 CLI(bailian-cli)获取 JSON 输出，把 CLI 当作稳定的
-// client library，避免直接调用未公开的控制台网关接口。
+// 支持两种模式：配置了阿里云 AK/SK（或 ~/.bailian/config.json 里有）时，
+// 直接签名调用 OpenAPI 换取 CLI access token，再查控制台网关；否则执行
+// 官方开源 CLI(bailian-cli)的 `bl usage token-plan --output json`。
 //
 // Token Plan 的余量语义是滚动配额百分比：5 小时窗口 + 1 周窗口的已用百分比
 // 及重置时间，与官方控制台展示一致，没有"绝对剩余 credits"接口。
@@ -17,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/h1origin/liquoten/internal/providers"
@@ -29,11 +31,20 @@ const defaultTimeout = 45 * time.Second
 
 const loginTimeout = 5 * time.Minute
 
-// Provider 执行 `bl usage token-plan --output json` 并解析结果。
+// Provider 查询百炼 Token Plan 用量，有 AK/SK 时直连，否则执行 bl。
 type Provider struct {
-	command string
-	apiKey  string
-	timeout time.Duration
+	command         string
+	apiKey          string
+	accessKeyID     string
+	accessKeySecret string
+	region          string
+	site            string
+	switchAgent     json.RawMessage
+	timeout         time.Duration
+	tokenBaseURL    string
+	gatewayBaseURL  string
+	tokenMu         sync.Mutex
+	token           string
 }
 
 func init() {
@@ -52,7 +63,17 @@ func New(opts providers.Options) *Provider {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 	}
-	return &Provider{command: cmd, apiKey: opts.APIKey, timeout: timeout}
+	p := &Provider{
+		command:         cmd,
+		apiKey:          opts.APIKey,
+		accessKeyID:     opts.AccessKeyID,
+		accessKeySecret: opts.AccessKeySecret,
+		region:          defaultRegion,
+		site:            defaultSite,
+		timeout:         timeout,
+	}
+	p.loadBLConfig()
+	return p
 }
 
 // Name 返回注册表名称。
@@ -64,6 +85,10 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
+
+	if p.hasCredentials() {
+		return p.queryDirect(ctx, bal)
+	}
 
 	out, err := p.run(ctx, "usage", "token-plan", "--output", "json")
 	if err != nil {
@@ -146,8 +171,11 @@ func lookup(name string) (string, bool) {
 	return "", false
 }
 
-// Preflight 检查 bl 是否已安装，返回其绝对路径。
+// Preflight 检查 bl 是否已安装，返回其绝对路径；直连模式不依赖 bl。
 func (p *Provider) Preflight(ctx context.Context) (string, error) {
+	if p.hasCredentials() {
+		return p.command, nil
+	}
 	path, ok := lookup(p.command)
 	if !ok && p.command != "bl" {
 		path, ok = lookup("bl")
