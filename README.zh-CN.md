@@ -40,7 +40,7 @@ liquoten 在菜单栏用一滴水显示各个大模型套餐用了多少：剩�
 | 服务 | 显示内容 | 数据来源 | 需要配置 |
 |---|---|---|---|
 | **Claude Code**（Pro / Max） | 5 小时、每周额度 | Claude Code 的 statusLine 输入，由 `liquoten statusline` 落盘 | [加一行 statusLine 配置](#claude-code) |
-| **ChatGPT Codex** | 5 小时、每周额度，Credits 余额，重置卡 | 本地 `~/.codex/sessions` 日志，每小时用 Codex 登录状态调用实时接口校正一次 | 无需配置 |
+| **ChatGPT Codex** | 5 小时、每周额度，Credits 余额，重置卡 | 本地 `~/.codex/sessions` 日志，每 30 分钟用 Codex 登录状态调用实时接口校正一次 | 无需配置 |
 | **阿里云百炼** Token Plan | 5 小时 / 每周 / 月度额度（取决于套餐） | 签名调用阿里云 OpenAPI 换 token，再查控制台网关 | 在服务页填写 AccessKey |
 | **Qoder / Qoder CN** | 本计费周期 Credits 用量、附加 Credits | 个人访问令牌查额度接口 | 在服务页填写令牌 |
 
@@ -95,8 +95,8 @@ Claude Code 会把订阅用量传给 [statusLine](https://code.claude.com/docs/e
 
 不需要配置，liquoten 会读取 `~/.codex/sessions` 里最新的用量。
 
-- **实时校正**：如果你用 ChatGPT 账号登录了 Codex，liquoten 还会每小时调用一次只读的用量接口来校正数据。这样即使几天没用 CLI，数字也是新的。
-- **重置卡**：每 12 小时查一次，最近一张离过期不到 12 小时会发通知提醒。
+- **实时校正**：如果你用 ChatGPT 账号登录了 Codex，liquoten 还会每 30 分钟调用一次只读的用量接口来校正数据。这样即使几天没用 CLI，数字也是新的。
+- **重置卡**：每 6 小时查一次，最近一张离过期不到 12 小时会发通知提醒。
 - **登录凭据**：liquoten 只读取 `~/.codex/auth.json`，不会自己续期令牌，也不会使用你的重置卡。
 
 ### 阿里云百炼
@@ -205,7 +205,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.liquoten.plist
 
 - 最多有一个轮询间隔的延迟。
 - Claude Code 的数据只在使用时更新。
-- Codex 每小时至少用实时数据校正一次。
+- Codex 每 30 分钟至少用实时数据校正一次。
 </details>
 
 <details>

@@ -436,7 +436,7 @@ func (p *Provider) queryDirect(ctx context.Context, bal providers.Balance, now t
 	if len(bal.Sections) == 0 {
 		return bal, errors.New("用量响应中没有可识别的额度字段")
 	}
-	p.refreshExtras(ctx, now)
+	p.refreshExtras(ctx, now, pctOrMinus1(tp.Per1Month) >= 100)
 	p.appendExtras(&bal, now)
 	return bal, nil
 }

@@ -20,7 +20,7 @@ const Name = "bailian"
 
 const defaultTimeout = 45 * time.Second
 
-const pollInterval = 10 * time.Minute
+const pollInterval = 30 * time.Minute
 
 // Provider 查询百炼 Token Plan 用量。
 type Provider struct {

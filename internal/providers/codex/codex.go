@@ -33,9 +33,9 @@ const usagePath = "/wham/usage"
 
 const resetCreditsPath = "/wham/rate-limit-reset-credits"
 
-const usageInterval = time.Hour
+const usageInterval = 30 * time.Minute
 
-const resetCreditsInterval = 12 * time.Hour
+const resetCreditsInterval = 6 * time.Hour
 
 var errNoAuth = errors.New("没有 Codex 登录凭据")
 

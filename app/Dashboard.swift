@@ -211,11 +211,11 @@ enum Style {
 
     static func providerDescription(_ provider: String) -> String {
         switch provider {
-        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量（每 10 分钟）、额度补充和套餐到期时间（每 12 小时）。建议使用只授予百炼权限的 RAM 子账号。"
+        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量（每 30 分钟）、额度补充和套餐到期时间（每 6 小时）。建议使用只授予百炼权限的 RAM 子账号。月额度用满后额度补充改为每 30 分钟查询。"
         case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
-        case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额，并用 Codex 的登录状态每小时校正一次、每 12 小时查询一次重置卡。无需额外配置。"
-        case "qoder": return "用个人访问令牌查询 qoder.com 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key。"
-        case "qodercn": return "用个人访问令牌查询 qoder.com.cn 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key。"
+        case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额，并用 Codex 的登录状态每 30 分钟校正一次、每 6 小时查询一次重置卡。无需额外配置。"
+        case "qoder": return "用个人访问令牌查询 qoder.com 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key，每 30 分钟查询一次。"
+        case "qodercn": return "用个人访问令牌查询 qoder.com.cn 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key，每 30 分钟查询一次。"
         default: return ""
         }
     }

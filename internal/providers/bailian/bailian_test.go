@@ -124,8 +124,8 @@ func TestQueryWithoutAccessKey(t *testing.T) {
 
 func TestPollInterval(t *testing.T) {
 	p := New(providers.Options{})
-	if got := p.PollInterval(); got != 10*time.Minute {
-		t.Fatalf("PollInterval = %v, want 10m", got)
+	if got := p.PollInterval(); got != 30*time.Minute {
+		t.Fatalf("PollInterval = %v, want 30m", got)
 	}
 	var _ providers.Scheduled = p
 }

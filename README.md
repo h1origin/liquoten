@@ -35,7 +35,7 @@ liquoten shows how much of each LLM plan you have used as a water droplet in the
 | Provider | What is shown | How it is read | Setup |
 |---|---|---|---|
 | **Claude Code** (Pro / Max) | 5-hour and weekly usage | Claude Code's `statusLine` input, saved by `liquoten statusline` | [Add a statusLine command](#claude-code) |
-| **ChatGPT Codex** | 5-hour and weekly usage, credits, reset credits | Local `~/.codex/sessions` logs, corrected hourly against the live usage endpoint with Codex's own login | None |
+| **ChatGPT Codex** | 5-hour and weekly usage, credits, reset credits | Local `~/.codex/sessions` logs, corrected every 30 minutes against the live usage endpoint with Codex's own login | None |
 | **Alibaba Cloud Bailian** Token Plan | 5-hour / weekly / monthly usage (depends on plan) | Signed Alibaba Cloud OpenAPI call + console gateway | Enter an AccessKey in the Services page |
 | **Qoder / Qoder CN** | Credits used this billing cycle and add-on credits | Personal access token → quota API | Enter a token in the Services page |
 
@@ -89,8 +89,8 @@ Claude Code's status bar then shows something like `[Opus] 5h 23% · 周 41%`, a
 ### ChatGPT Codex
 
 No setup needed. liquoten reads the latest usage from `~/.codex/sessions`.
-- **Hourly correction**: if you are signed in to Codex with ChatGPT, liquoten also calls the read-only usage endpoint once an hour, so numbers stay current when you have not used the CLI for a while.
-- **Reset credits**: checked every 12 hours. You get a notification when one will expire within 12 hours.
+- **30-minute correction**: if you are signed in to Codex with ChatGPT, liquoten also calls the read-only usage endpoint every 30 minutes, so numbers stay current when you have not used the CLI for a while.
+- **Reset credits**: checked every 6 hours. You get a notification when one will expire within 12 hours.
 - **Login**: liquoten only reads `~/.codex/auth.json`. It never refreshes tokens itself and never redeems reset credits.
 
 ### Alibaba Cloud Bailian
@@ -191,7 +191,7 @@ Enter the key on the Services page. If it is rejected with `NotAuthorised`, gran
 <details>
 <summary><b>Numbers differ from the provider's console</b></summary>
 
-There can be up to one poll interval of delay. Claude Code data updates only while Claude Code is in use. Codex is corrected against the live data at least once an hour.
+There can be up to one poll interval of delay. Claude Code data updates only while Claude Code is in use. Codex is corrected against the live data every 30 minutes.
 </details>
 
 <details>

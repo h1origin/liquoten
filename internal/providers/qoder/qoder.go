@@ -74,8 +74,8 @@ func (p *Provider) Name() string { return p.site.Name }
 
 func (p *Provider) RequiresAPIKey() bool { return true }
 
-// PollInterval 额度按计费周期累计，5 分钟查一次足够。
-func (p *Provider) PollInterval() time.Duration { return 5 * time.Minute }
+// PollInterval 额度按计费周期累计，30 分钟查一次。
+func (p *Provider) PollInterval() time.Duration { return 30 * time.Minute }
 
 // Query 查询本计费周期 Credits 用量与加购余额。
 func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {

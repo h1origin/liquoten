@@ -139,6 +139,14 @@ func TestParseUsageVariants(t *testing.T) {
 	}
 }
 
+func TestPollInterval(t *testing.T) {
+	p := New(Global, providers.Options{})
+	if got := p.PollInterval(); got != 30*time.Minute {
+		t.Fatalf("PollInterval = %v, want 30m", got)
+	}
+	var _ providers.Scheduled = p
+}
+
 func TestRegistered(t *testing.T) {
 	for _, name := range []string{"qoder", "qodercn"} {
 		p, err := providers.New(name, providers.Options{APIKey: "x"})

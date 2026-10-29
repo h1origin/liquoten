@@ -115,21 +115,21 @@ func TestAddonAndSubscriptionSections(t *testing.T) {
 
 	now = now.Add(10 * time.Minute)
 	if _, err := p.Query(context.Background()); err != nil {
-		t.Fatalf("Query within 12h: %v", err)
+		t.Fatalf("Query within 6h: %v", err)
 	}
 	mu.Lock()
 	if calls[usageAPI] != 2 || calls[addonSummaryAPI] != 1 || calls[subscriptionAPI] != 1 {
-		t.Fatalf("calls within 12h = %v", calls)
+		t.Fatalf("calls within 6h = %v", calls)
 	}
 	mu.Unlock()
 
-	now = now.Add(12 * time.Hour)
+	now = now.Add(6 * time.Hour)
 	if _, err := p.Query(context.Background()); err != nil {
-		t.Fatalf("Query after 12h: %v", err)
+		t.Fatalf("Query after 6h: %v", err)
 	}
 	mu.Lock()
 	if calls[usageAPI] != 3 || calls[addonSummaryAPI] != 2 || calls[subscriptionAPI] != 2 {
-		t.Fatalf("calls after 12h = %v", calls)
+		t.Fatalf("calls after 6h = %v", calls)
 	}
 	mu.Unlock()
 }
@@ -227,23 +227,23 @@ func TestExtrasFailureDoesNotAffectQuery(t *testing.T) {
 		t.Fatalf("Sections = %+v, want usage only", bal.Sections)
 	}
 
-	now = now.Add(time.Hour)
+	now = now.Add(30 * time.Minute)
 	if _, err := p.Query(context.Background()); err != nil {
-		t.Fatalf("Query within 12h: %v", err)
+		t.Fatalf("Query within 6h: %v", err)
 	}
 	mu.Lock()
 	if calls[addonSummaryAPI] != 1 || calls[subscriptionAPI] != 1 {
-		t.Fatalf("extras calls = %v, want 1 each before 12h", calls)
+		t.Fatalf("extras calls = %v, want 1 each before 6h", calls)
 	}
 	mu.Unlock()
 
-	now = now.Add(11 * time.Hour)
+	now = now.Add(5*time.Hour + 30*time.Minute)
 	if _, err := p.Query(context.Background()); err != nil {
-		t.Fatalf("Query after 12h: %v", err)
+		t.Fatalf("Query after 6h: %v", err)
 	}
 	mu.Lock()
 	if calls[addonSummaryAPI] != 2 || calls[subscriptionAPI] != 2 {
-		t.Fatalf("extras calls = %v, want retry after 12h", calls)
+		t.Fatalf("extras calls = %v, want retry after 6h", calls)
 	}
 	mu.Unlock()
 	logs := logBuf.String()
@@ -305,6 +305,83 @@ func TestAddonNotLoginedRetriesWithNewToken(t *testing.T) {
 	if tokenCalls != 2 || addonCalls != 2 {
 		t.Fatalf("token/addon calls = %d / %d, want 2 / 2", tokenCalls, addonCalls)
 	}
+}
+
+func TestAddonIntervalWhenMonthlyQuotaFull(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	near := readFile(t, filepath.Join("testdata", "usage-data-month-nearly-full.json"))
+	full := readFile(t, filepath.Join("testdata", "usage-data-month-full.json"))
+	addonBody := readFile(t, filepath.Join("testdata", "addon-summary.json"))
+	subBody := readFile(t, filepath.Join("testdata", "subscription.json"))
+
+	var mu sync.Mutex
+	currentUsage := near
+	calls := map[string]int{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == tokenPath {
+			fmt.Fprint(w, `{"Success":true,"cliAccessToken":"token-1"}`)
+			return
+		}
+		api := testAPI(t, r)
+		mu.Lock()
+		calls[api]++
+		body := currentUsage
+		mu.Unlock()
+		switch api {
+		case usageAPI:
+			w.Write(body)
+		case addonSummaryAPI:
+			w.Write(addonBody)
+		case subscriptionAPI:
+			w.Write(subBody)
+		}
+	}))
+	defer server.Close()
+
+	p := New(providers.Options{AccessKeyID: "LTAItestkeyid", AccessKeySecret: "testsecret"})
+	p.tokenBaseURL = server.URL
+	p.gatewayBaseURL = server.URL
+	p.now = func() time.Time { return now }
+	query := func() {
+		t.Helper()
+		if _, err := p.Query(context.Background()); err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+	}
+	setUsage := func(body []byte) {
+		mu.Lock()
+		currentUsage = body
+		mu.Unlock()
+	}
+	checkCalls := func(addon, sub int) {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		if calls[addonSummaryAPI] != addon || calls[subscriptionAPI] != sub {
+			t.Fatalf("calls = %v, want addon %d sub %d", calls, addon, sub)
+		}
+	}
+
+	query()
+	checkCalls(1, 1)
+
+	now = now.Add(30 * time.Minute)
+	query()
+	checkCalls(1, 1)
+
+	setUsage(full)
+	now = now.Add(30 * time.Minute)
+	query()
+	checkCalls(2, 1)
+
+	now = now.Add(30 * time.Minute)
+	query()
+	checkCalls(3, 1)
+
+	setUsage(near)
+	now = now.Add(30 * time.Minute)
+	query()
+	checkCalls(3, 1)
 }
 
 func TestRemainingDays(t *testing.T) {

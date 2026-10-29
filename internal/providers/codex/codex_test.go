@@ -288,18 +288,18 @@ func TestLiveUsageFrequency(t *testing.T) {
 		}
 	}
 	query()
-	now = t0.Add(30 * time.Minute)
+	now = t0.Add(15 * time.Minute)
 	query()
 	mu.Lock()
 	if calls != 1 {
-		t.Fatalf("calls = %d, want 1 within one hour", calls)
+		t.Fatalf("calls = %d, want 1 within 30 minutes", calls)
 	}
 	mu.Unlock()
-	now = t0.Add(time.Hour)
+	now = t0.Add(30 * time.Minute)
 	query()
 	mu.Lock()
 	if calls != 2 {
-		t.Fatalf("calls = %d, want 2 after one hour", calls)
+		t.Fatalf("calls = %d, want 2 after 30 minutes", calls)
 	}
 	mu.Unlock()
 }
@@ -356,12 +356,14 @@ func TestResetCreditsCachingAndExpiry(t *testing.T) {
 	firstExpiry := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
 	secondExpiry := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 	check(2, firstExpiry, 1)
-	now = t0.Add(time.Hour)
+	now = t0.Add(30 * time.Minute)
 	check(2, firstExpiry, 1)
+	now = t0.Add(6 * time.Hour)
+	check(2, firstExpiry, 2)
 	now = time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
-	check(1, secondExpiry, 2)
+	check(1, secondExpiry, 3)
 	now = time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
-	check(0, time.Time{}, 3)
+	check(0, time.Time{}, 4)
 }
 
 func TestNoAuthSkipsLiveRequests(t *testing.T) {
@@ -433,13 +435,22 @@ func TestLive401FallsBackToLocalAndBacksOff(t *testing.T) {
 	if len(bal.Sections) == 0 || bal.Sections[0].UsedPct != 6 {
 		t.Fatalf("Sections = %+v, want local weekly 6%%", bal.Sections)
 	}
-	now = t0.Add(30 * time.Minute)
+	now = t0.Add(15 * time.Minute)
 	if _, err := p.Query(context.Background()); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
 	mu.Lock()
 	if calls != 1 {
-		t.Fatalf("calls = %d, want 1 after 401 within one hour", calls)
+		t.Fatalf("calls = %d, want 1 after 401 within 30 minutes", calls)
+	}
+	mu.Unlock()
+	now = t0.Add(30 * time.Minute)
+	if _, err := p.Query(context.Background()); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	mu.Lock()
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2 after 401 at 30 minutes", calls)
 	}
 	mu.Unlock()
 }
@@ -478,7 +489,7 @@ func TestLiveRequestHeadersAndTokenReload(t *testing.T) {
 	if _, err := p.Query(context.Background()); err != nil {
 		t.Fatalf("Query: %v", err)
 	}
-	now = t0.Add(time.Hour)
+	now = t0.Add(30 * time.Minute)
 	writeTestAuth(t, home, "token-2", "account-2")
 	if _, err := p.Query(context.Background()); err != nil {
 		t.Fatalf("Query: %v", err)
