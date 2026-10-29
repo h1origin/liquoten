@@ -10,7 +10,7 @@ for base in [16, 32, 128, 256, 512] {
                                    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        Droplet.appIcon(size: CGFloat(px)).draw(in: NSRect(x: 0, y: 0, width: px, height: px))
+        Gourd.appIcon(size: CGFloat(px)).draw(in: NSRect(x: 0, y: 0, width: px, height: px))
         NSGraphicsContext.restoreGraphicsState()
         let name = scale == 1 ? "icon_\(base)x\(base).png" : "icon_\(base)x\(base)@2x.png"
         try rep.representation(using: .png, properties: [:])!.write(to: dir.appendingPathComponent(name))

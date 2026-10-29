@@ -10,7 +10,7 @@ APP="$BUILD_DIR/$APP_NAME.app"
 HOST_ARCH="$(uname -m)"
 ARCHS="${ARCHS:-$HOST_ARCH}"
 SOURCES=(app/main.swift app/Models.swift app/DaemonManager.swift
-  app/NotificationConsumer.swift app/Updater.swift app/Droplet.swift app/Dashboard.swift app/AppDelegate.swift)
+  app/NotificationConsumer.swift app/Updater.swift app/Gourd.swift app/Dashboard.swift app/AppDelegate.swift)
 
 echo "==> 清理旧产物"
 rm -rf "$APP"
@@ -41,7 +41,7 @@ if go version "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null | grep -q ": go1"; the
 fi
 
 echo "==> 生成图标"
-swiftc -O -target "$HOST_ARCH-apple-macos13.0" -o "$TMP/make-icon" app/Droplet.swift app/icon/main.swift
+swiftc -O -target "$HOST_ARCH-apple-macos13.0" -o "$TMP/make-icon" app/Gourd.swift app/icon/main.swift
 "$TMP/make-icon" "$TMP/AppIcon.iconset"
 iconutil -c icns -o "$APP/Contents/Resources/AppIcon.icns" "$TMP/AppIcon.iconset"
 

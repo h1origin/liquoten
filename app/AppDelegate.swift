@@ -197,14 +197,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     static func statusImage(_ balances: [BalanceState], badge: Bool = false) -> NSImage {
         let used = balances.filter { $0.error?.isEmpty ?? true }
             .flatMap(\.sections).map(\.usedPct).filter { $0 >= 0 }.max()
-        guard let used else { return Droplet.menuBarImage(remaining: nil, tint: nil, badge: badge) }
+        guard let used else { return Gourd.menuBarImage(remaining: nil, tint: nil, badge: badge) }
         let tint: NSColor?
         switch used {
         case 90...: tint = .systemRed
         case 70..<90: tint = .systemOrange
         default: tint = nil
         }
-        return Droplet.menuBarImage(remaining: max(0, 100 - used), tint: tint, badge: badge)
+        return Gourd.menuBarImage(remaining: max(0, 100 - used), tint: tint, badge: badge)
     }
 
     // MARK: - 更新
