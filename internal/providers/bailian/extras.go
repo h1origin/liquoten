@@ -12,8 +12,6 @@ import (
 
 const extrasInterval = 6 * time.Hour
 
-const addonFullQuotaInterval = 30 * time.Minute
-
 type addonSummaryResponse struct {
 	RemainingCredits  float64 `json:"remainingCredits"`
 	ActiveCount       int     `json:"activeCount"`
@@ -37,11 +35,9 @@ func (p *Provider) RefreshNow() {
 }
 
 func (p *Provider) refreshExtras(ctx context.Context, now time.Time, monthFull bool) {
-	addonInterval := extrasInterval
 	if monthFull {
-		addonInterval = addonFullQuotaInterval
-	}
-	if p.lastAddonAttempt.IsZero() || now.Sub(p.lastAddonAttempt) >= addonInterval {
+		p.refreshAddonSummary(ctx, now)
+	} else if p.lastAddonAttempt.IsZero() || now.Sub(p.lastAddonAttempt) >= extrasInterval {
 		p.refreshAddonSummary(ctx, now)
 	}
 	if p.lastSubscriptionAttempt.IsZero() || now.Sub(p.lastSubscriptionAttempt) >= extrasInterval {

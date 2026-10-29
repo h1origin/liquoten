@@ -374,7 +374,7 @@ func TestAddonIntervalWhenMonthlyQuotaFull(t *testing.T) {
 	query()
 	checkCalls(2, 1)
 
-	now = now.Add(30 * time.Minute)
+	now = now.Add(27 * time.Minute)
 	query()
 	checkCalls(3, 1)
 
