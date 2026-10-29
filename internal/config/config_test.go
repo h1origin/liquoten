@@ -244,3 +244,88 @@ timeout = "30s"
 		t.Fatalf("阈值被破坏: %v", got)
 	}
 }
+
+func TestSetProviderAccessKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `# top comment
+[providers.bailian]
+enabled = true
+command = "/opt/homebrew/bin/bl"
+# keep this comment
+
+[thresholds.bailian]
+"5-hour quota" = 70.0
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	id, secret := "LTAI-first", "secret-first"
+	if err := SetProvider(path, "bailian", ProviderUpdate{AccessKeyID: &id, AccessKeySecret: &secret}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc := cfg.Providers["bailian"]
+	if pc.AccessKeyID != id || pc.AccessKeySecret != secret {
+		t.Fatalf("AccessKey = %q / %q", pc.AccessKeyID, pc.AccessKeySecret)
+	}
+	if !pc.IsEnabled() || pc.Command != "/opt/homebrew/bin/bl" {
+		t.Fatalf("其余配置被破坏: %+v", pc)
+	}
+
+	id, secret = "LTAI-second", "secret-second"
+	if err := SetProvider(path, "bailian", ProviderUpdate{AccessKeyID: &id, AccessKeySecret: &secret}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc = cfg.Providers["bailian"]
+	if pc.AccessKeyID != id || pc.AccessKeySecret != secret {
+		t.Fatalf("覆盖后 AccessKey = %q / %q", pc.AccessKeyID, pc.AccessKeySecret)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Count(text, "access_key_id = ") != 1 || strings.Count(text, "access_key_secret = ") != 1 {
+		t.Fatalf("覆盖时不应重复写入:\n%s", text)
+	}
+	if !strings.Contains(text, "# top comment") || !strings.Contains(text, "# keep this comment") {
+		t.Fatalf("注释应保留:\n%s", text)
+	}
+
+	if err := SetProvider(path, "bailian", ProviderUpdate{Delete: []string{"access_key_id", "access_key_secret"}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pc = cfg.Providers["bailian"]
+	if pc.AccessKeyID != "" || pc.AccessKeySecret != "" {
+		t.Fatalf("删除后 AccessKey 仍存在: %q / %q", pc.AccessKeyID, pc.AccessKeySecret)
+	}
+	if !pc.IsEnabled() || pc.Command != "/opt/homebrew/bin/bl" {
+		t.Fatalf("删除后其余配置被破坏: %+v", pc)
+	}
+	if got := cfg.Thresholds["bailian"]["5-hour quota"]; got != 70 {
+		t.Fatalf("阈值被破坏: %v", got)
+	}
+	data, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text = string(data)
+	if strings.Contains(text, "access_key_id") || strings.Contains(text, "access_key_secret") {
+		t.Fatalf("删除后仍残留 AccessKey 键:\n%s", text)
+	}
+	if !strings.Contains(text, "# keep this comment") {
+		t.Fatalf("删除后注释应保留:\n%s", text)
+	}
+}

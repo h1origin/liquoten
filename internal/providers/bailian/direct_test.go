@@ -416,6 +416,60 @@ func TestBLConfigCredentialsAndRegion(t *testing.T) {
 	}
 }
 
+func TestAccessKeyStatus(t *testing.T) {
+	orig := bailianConfigPath
+	t.Cleanup(func() { bailianConfigPath = orig })
+
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.json")
+	bailianConfigPath = func() string { return missing }
+	if source, masked := New(providers.Options{}).AccessKeyStatus(); source != "" || masked != "" {
+		t.Fatalf("no AK: source/masked = %q / %q", source, masked)
+	}
+
+	configured := New(providers.Options{AccessKeyID: "LTAIconfig123456ytkt", AccessKeySecret: "config-secret"})
+	if source, masked := configured.AccessKeyStatus(); source != "config" || masked != "LTAI…ytkt" {
+		t.Fatalf("config AK: source/masked = %q / %q", source, masked)
+	}
+
+	path := filepath.Join(dir, "config.json")
+	content := `{"access_key_id":"LTAIbl123456ytkt","access_key_secret":"bl-secret"}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bailianConfigPath = func() string { return path }
+	fromBL := New(providers.Options{})
+	if source, masked := fromBL.AccessKeyStatus(); source != "bl" || masked != "LTAI…ytkt" {
+		t.Fatalf("bl AK: source/masked = %q / %q", source, masked)
+	}
+
+	content = `{"access_key_id":"LTAIblNEW1234abcd","access_key_secret":"bl-secret-2"}`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if source, masked := fromBL.AccessKeyStatus(); source != "bl" || masked != "LTAI…abcd" {
+		t.Fatalf("reloaded bl AK: source/masked = %q / %q", source, masked)
+	}
+}
+
+func TestMaskAccessKeyID(t *testing.T) {
+	cases := map[string]string{
+		"":                   "",
+		"abc":                "…abc",
+		"abcd":               "…abcd",
+		"abcde":              "…bcde",
+		"1234567":            "…4567",
+		"12345678":           "1234…5678",
+		"LTAI123456ytkt":     "LTAI…ytkt",
+		"LTAI1234567890abcd": "LTAI…abcd",
+	}
+	for id, want := range cases {
+		if got := maskAccessKeyID(id); got != want {
+			t.Errorf("maskAccessKeyID(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
 func TestBLConfigReloadSwitchesToDirectAndInvalidatesToken(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	orig := bailianConfigPath

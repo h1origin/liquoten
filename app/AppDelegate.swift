@@ -23,6 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         model.onToggleLoginItem = { [weak self] in self?.toggleLoginItem() }
         model.onQuit = { NSApp.terminate(nil) }
         model.onSetEnabled = { [weak self] name, enabled in self?.setEnabled(name, enabled) }
+        model.onSetAccessKey = { [weak self] name, id, secret, completion in
+            guard let self else { return completion(false) }
+            self.setAccessKey(name, id: id, secret: secret, completion: completion)
+        }
+        model.onClearAccessKey = { [weak self] name in self?.clearAccessKey(name) }
         model.onCheckUpdate = { [weak self] in self?.checkUpdate(manual: true) }
         model.onSkipUpdate = { [weak self] in self?.skipUpdate() }
         model.onReorder = { [weak self] in self?.rebuildUI() }
@@ -334,6 +339,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         model.busyText = text
     }
 
+    private func setAccessKey(_ name: String, id: String, secret: String, completion: @escaping (Bool) -> Void) {
+        guard model.togglingProvider == nil else { return completion(false) }
+        begin(name, "正在验证 AccessKey…")
+        daemon.setAccessKey(provider: name, id: id, secret: secret) { [weak self] failure in
+            guard let self else { return completion(false) }
+            self.finish(failure.map { ("AccessKey 验证失败", $0) })
+            completion(failure == nil)
+        }
+    }
+
+    private func clearAccessKey(_ name: String) {
+        guard model.togglingProvider == nil else { return }
+        begin(name, "正在清除 AccessKey…")
+        daemon.clearAccessKey(provider: name) { [weak self] failure in
+            guard let self else { return }
+            self.finish(failure.map { ("清除 AccessKey 失败", $0) })
+        }
+    }
+
     private func finish(_ failure: (title: String, message: String)?, reload: Bool = true) {
         model.togglingProvider = nil
         model.busyText = nil
@@ -387,7 +411,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "需要先安装百炼命令行工具 bl"
-        alert.informativeText = "Liquoten 通过阿里云官方的 bailian-cli 查询百炼用量，本机还没有安装。\n\n点「安装」会执行 npm install -g bailian-cli（需要 Node.js 22.12 或更高版本）。装不上时服务不会开启。"
+        alert.informativeText = "Liquoten 通过阿里云官方的 bailian-cli 查询百炼用量，本机还没有安装。\n\n点「安装」会执行 npm install -g bailian-cli（需要 Node.js 22.12 或更高版本）。装不上时服务不会开启。\n\n也可以取消后，在服务页填写阿里云 AccessKey，无需安装 bl。"
         alert.addButton(withTitle: "安装")
         alert.addButton(withTitle: "取消")
         return alert.runModal() == .alertFirstButtonReturn

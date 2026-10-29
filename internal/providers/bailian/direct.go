@@ -96,6 +96,34 @@ func (p *Provider) hasCredentials() bool {
 	return p.snapshot().hasCredentials()
 }
 
+func (p *Provider) AccessKeyStatus() (string, string) {
+	p.refreshAuth()
+	if p.hasConfiguredCredentials() {
+		return "config", maskAccessKeyID(p.configuredAccessKeyID)
+	}
+	auth := p.snapshot()
+	if auth.hasCredentials() {
+		return "bl", maskAccessKeyID(auth.accessKeyID)
+	}
+	return "", ""
+}
+
+func maskAccessKeyID(id string) string {
+	if id == "" {
+		return ""
+	}
+	if len(id) < 8 {
+		tail := id
+		if len(id) > 4 {
+			tail = id[len(id)-4:]
+		}
+		return "…" + tail
+	}
+	return id[:4] + "…" + id[len(id)-4:]
+}
+
+var _ providers.AccessKeyReporter = (*Provider)(nil)
+
 func (p *Provider) snapshot() authSnapshot {
 	p.mu.Lock()
 	defer p.mu.Unlock()

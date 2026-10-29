@@ -134,10 +134,12 @@ func SetEnabled(path, name string, enabled bool) error {
 
 // ProviderUpdate 描述对 [providers.<name>] 的改写：非 nil 字段写入，Delete 中的键删除。
 type ProviderUpdate struct {
-	Enabled *bool
-	APIKey  *string
-	Command *string
-	Delete  []string
+	Enabled         *bool
+	APIKey          *string
+	AccessKeyID     *string
+	AccessKeySecret *string
+	Command         *string
+	Delete          []string
 }
 
 // SetProvider 原地改写配置文件中的 [providers.<name>]，保留其余内容与注释。
@@ -153,6 +155,12 @@ func SetProvider(path, name string, u ProviderUpdate) error {
 	}
 	if u.APIKey != nil {
 		set = append(set, [2]string{"api_key", tomlString(*u.APIKey)})
+	}
+	if u.AccessKeyID != nil {
+		set = append(set, [2]string{"access_key_id", tomlString(*u.AccessKeyID)})
+	}
+	if u.AccessKeySecret != nil {
+		set = append(set, [2]string{"access_key_secret", tomlString(*u.AccessKeySecret)})
 	}
 	if u.Command != nil {
 		set = append(set, [2]string{"command", tomlString(*u.Command)})

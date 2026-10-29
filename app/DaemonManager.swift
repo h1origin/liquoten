@@ -73,6 +73,16 @@ final class DaemonManager {
         run(["disable", "-config", Self.configPath, provider]) { _, failure, _ in completion(failure) }
     }
 
+    func setAccessKey(provider: String, id: String, secret: String, completion: @escaping (String?) -> Void) {
+        run(["set-access-key", "-config", Self.configPath, provider], stdin: id + "\n" + secret) { _, failure, _ in
+            completion(failure)
+        }
+    }
+
+    func clearAccessKey(provider: String, completion: @escaping (String?) -> Void) {
+        run(["clear-access-key", "-config", Self.configPath, provider]) { _, failure, _ in completion(failure) }
+    }
+
     func install(provider: String, completion: @escaping (String?) -> Void) {
         run(["install", "-config", Self.configPath, provider]) { _, failure, _ in completion(failure) }
     }

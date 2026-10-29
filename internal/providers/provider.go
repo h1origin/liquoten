@@ -49,6 +49,11 @@ type KeyRequired interface {
 	RequiresAPIKey() bool
 }
 
+// AccessKeyReporter 由支持 AccessKey 的 provider 实现；maskedID 不含 secret。
+type AccessKeyReporter interface {
+	AccessKeyStatus() (source string, maskedID string)
+}
+
 // ErrNotInstalled 表示 provider 依赖的外部工具未安装。
 var ErrNotInstalled = errors.New("依赖工具未安装")
 

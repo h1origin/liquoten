@@ -90,11 +90,17 @@ struct ProviderInfo: Decodable {
     let enabled: Bool
     var requiresApiKey = false
     var installable = false
+    var accessKeySource = ""
+    var accessKeyMasked = ""
+
+    var hasAccessKey: Bool { !accessKeySource.isEmpty }
 
     private enum CodingKeys: String, CodingKey {
         case name, enabled
         case requiresApiKey = "requires_api_key"
         case installable
+        case accessKeySource = "access_key_source"
+        case accessKeyMasked = "access_key_masked"
     }
 
     init(from decoder: Decoder) throws {
@@ -103,5 +109,7 @@ struct ProviderInfo: Decodable {
         enabled = try c.decode(Bool.self, forKey: .enabled)
         requiresApiKey = try c.decodeIfPresent(Bool.self, forKey: .requiresApiKey) ?? false
         installable = try c.decodeIfPresent(Bool.self, forKey: .installable) ?? false
+        accessKeySource = try c.decodeIfPresent(String.self, forKey: .accessKeySource) ?? ""
+        accessKeyMasked = try c.decodeIfPresent(String.self, forKey: .accessKeyMasked) ?? ""
     }
 }

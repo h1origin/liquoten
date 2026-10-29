@@ -36,7 +36,7 @@ func main() {
 		statusline()
 		return
 	}
-	if len(os.Args) > 1 && slices.Contains([]string{"providers", "enable", "disable", "install"}, os.Args[1]) {
+	if len(os.Args) > 1 && slices.Contains([]string{"providers", "enable", "disable", "install", "set-access-key", "clear-access-key"}, os.Args[1]) {
 		if err := manageProviders(os.Args[1], os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			if errors.Is(err, providers.ErrNotInstalled) {
@@ -205,11 +205,13 @@ func statusline() {
 // exitNotInstalled 是 enable 因依赖工具缺失而失败时的退出码，App 据此提示安装。
 const exitNotInstalled = 3
 
-// manageProviders 实现 providers / enable / disable / install 子命令，供 App 的“服务”页调用。
+// manageProviders 实现 providers / enable / disable / install / set-access-key / clear-access-key 子命令，供 App 的“服务”页调用。
 //
 //	enable [-api-key-stdin] <name>：检查依赖（缺失时退出码 3），需要 key 的先验证 key 再写入配置
-//	disable <name>：停用，并删除配置中的 api_key
+//	disable <name>：停用，并删除配置中的 api_key / access_key_id / access_key_secret
 //	install <name>：安装 provider 依赖的外部工具（如 bailian-cli）
+//	set-access-key <name>：从标准输入读 AK ID 和 secret，验证通过后写入配置
+//	clear-access-key <name>：删除配置中的 access_key_id / access_key_secret，不改 enabled
 func manageProviders(cmd string, args []string) error {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	configPath := fs.String("config", config.DefaultPath(), "配置文件路径")
@@ -223,19 +225,31 @@ func manageProviders(cmd string, args []string) error {
 
 	if cmd == "providers" {
 		type item struct {
-			Name           string `json:"name"`
-			Enabled        bool   `json:"enabled"`
-			RequiresAPIKey bool   `json:"requires_api_key"`
-			Installable    bool   `json:"installable"`
+			Name            string `json:"name"`
+			Enabled         bool   `json:"enabled"`
+			RequiresAPIKey  bool   `json:"requires_api_key"`
+			Installable     bool   `json:"installable"`
+			AccessKeySource string `json:"access_key_source"`
+			AccessKeyMasked string `json:"access_key_masked"`
 		}
 		var out []item
 		for _, name := range providers.Names() {
 			pc, ok := cfg.Providers[name]
 			it := item{Name: name, Enabled: ok && pc.IsEnabled()}
-			if p, err := providers.New(name, providers.Options{DataDir: store.DefaultDir()}); err == nil {
+			if p, err := providers.New(name, providers.Options{
+				APIKey:          pc.APIKey,
+				AccessKeyID:     pc.AccessKeyID,
+				AccessKeySecret: pc.AccessKeySecret,
+				Command:         pc.Command,
+				Timeout:         pc.Timeout,
+				DataDir:         store.DefaultDir(),
+			}); err == nil {
 				k, ok := p.(providers.KeyRequired)
 				it.RequiresAPIKey = ok && k.RequiresAPIKey()
 				_, it.Installable = p.(providers.Installer)
+				if r, ok := p.(providers.AccessKeyReporter); ok {
+					it.AccessKeySource, it.AccessKeyMasked = r.AccessKeyStatus()
+				}
 			}
 			out = append(out, it)
 		}
@@ -264,7 +278,62 @@ func manageProviders(cmd string, args []string) error {
 
 	case "disable":
 		off := false
-		return config.SetProvider(*configPath, name, config.ProviderUpdate{Enabled: &off, Delete: []string{"api_key"}})
+		return config.SetProvider(*configPath, name, config.ProviderUpdate{
+			Enabled: &off,
+			Delete:  []string{"api_key", "access_key_id", "access_key_secret"},
+		})
+
+	case "clear-access-key":
+		p, err := providers.New(name, opts)
+		if err != nil {
+			return err
+		}
+		if _, ok := p.(providers.AccessKeyReporter); !ok {
+			return fmt.Errorf("provider %q 不支持 AccessKey", name)
+		}
+		return config.SetProvider(*configPath, name, config.ProviderUpdate{
+			Delete: []string{"access_key_id", "access_key_secret"},
+		})
+
+	case "set-access-key":
+		p, err := providers.New(name, opts)
+		if err != nil {
+			return err
+		}
+		if _, ok := p.(providers.AccessKeyReporter); !ok {
+			return fmt.Errorf("provider %q 不支持 AccessKey", name)
+		}
+		raw, err := io.ReadAll(io.LimitReader(os.Stdin, 64<<10))
+		if err != nil {
+			return err
+		}
+		parts := strings.SplitN(string(raw), "\n", 3)
+		id := strings.TrimSpace(parts[0])
+		secret := ""
+		if len(parts) > 1 {
+			secret = strings.TrimSpace(parts[1])
+		}
+		if id == "" || secret == "" {
+			return errors.New("请填写 AccessKey ID 和 AccessKey Secret")
+		}
+		opts.AccessKeyID = id
+		opts.AccessKeySecret = secret
+		p, err = providers.New(name, opts)
+		if err != nil {
+			return err
+		}
+		qctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		_, err = p.Query(qctx)
+		cancel()
+		if err != nil {
+			return err
+		}
+		on := true
+		return config.SetProvider(*configPath, name, config.ProviderUpdate{
+			Enabled:         &on,
+			AccessKeyID:     &id,
+			AccessKeySecret: &secret,
+		})
 	}
 
 	on := true
