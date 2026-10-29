@@ -33,18 +33,20 @@ const loginTimeout = 5 * time.Minute
 
 // Provider 查询百炼 Token Plan 用量，有 AK/SK 时直连，否则执行 bl。
 type Provider struct {
-	command         string
-	apiKey          string
-	accessKeyID     string
-	accessKeySecret string
-	region          string
-	site            string
-	switchAgent     json.RawMessage
-	timeout         time.Duration
-	tokenBaseURL    string
-	gatewayBaseURL  string
-	tokenMu         sync.Mutex
-	token           string
+	command                   string
+	apiKey                    string
+	configuredAccessKeyID     string
+	configuredAccessKeySecret string
+	timeout                   time.Duration
+	tokenBaseURL              string
+	gatewayBaseURL            string
+	mu                        sync.Mutex
+	accessKeyID               string
+	accessKeySecret           string
+	region                    string
+	site                      string
+	switchAgent               json.RawMessage
+	token                     string
 }
 
 func init() {
@@ -64,15 +66,15 @@ func New(opts providers.Options) *Provider {
 		timeout = defaultTimeout
 	}
 	p := &Provider{
-		command:         cmd,
-		apiKey:          opts.APIKey,
-		accessKeyID:     opts.AccessKeyID,
-		accessKeySecret: opts.AccessKeySecret,
-		region:          defaultRegion,
-		site:            defaultSite,
-		timeout:         timeout,
+		command:                   cmd,
+		apiKey:                    opts.APIKey,
+		configuredAccessKeyID:     opts.AccessKeyID,
+		configuredAccessKeySecret: opts.AccessKeySecret,
+		region:                    defaultRegion,
+		site:                      defaultSite,
+		timeout:                   timeout,
 	}
-	p.loadBLConfig()
+	p.initAuth()
 	return p
 }
 
@@ -86,8 +88,11 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 
-	if p.hasCredentials() {
-		return p.queryDirect(ctx, bal)
+	if !p.hasConfiguredCredentials() {
+		p.refreshAuth()
+	}
+	if auth := p.snapshot(); auth.hasCredentials() {
+		return p.queryDirect(ctx, bal, auth)
 	}
 
 	out, err := p.run(ctx, "usage", "token-plan", "--output", "json")
@@ -173,7 +178,10 @@ func lookup(name string) (string, bool) {
 
 // Preflight 检查 bl 是否已安装，返回其绝对路径；直连模式不依赖 bl。
 func (p *Provider) Preflight(ctx context.Context) (string, error) {
-	if p.hasCredentials() {
+	if !p.hasConfiguredCredentials() {
+		p.refreshAuth()
+	}
+	if p.snapshot().hasCredentials() {
 		return p.command, nil
 	}
 	path, ok := lookup(p.command)
