@@ -1,199 +1,156 @@
-# liquoten
+<div align="center">
 
-macOS 菜单栏实时显示 LLM 额度/余额的轻量监控工具。只读轮询各 provider 的余额接口，不站在你的请求链路上。
+<img src="docs/logo.png" width="128" alt="Liquoten logo">
 
-![架构图](docs/liquoten-architecture.png)
+# Liquoten
 
-> 架构图为可编辑的 Excalidraw 源文件：[docs/liquoten-architecture.excalidraw](docs/liquoten-architecture.excalidraw)（拖入 excalidraw.com 或 VS Code 插件编辑）
+**Keep an eye on your LLM subscription quotas, right from the macOS menu bar.**
 
-- **当前支持**：阿里云百炼 Token Plan、Claude Code 订阅（Pro/Max）、ChatGPT Codex 订阅（读本地会话记录）、Qoder / Qoder CN（个人访问令牌查 Credits），5 小时 / 1 周滚动配额（百炼按月计费的套餐为月度配额）百分比 + 重置倒计时
-- **形态**：原生 Swift 菜单栏 App（Liquoten.app）+ Go daemon；阈值升穿发 macOS 系统通知
-- **通用性**：新增 provider = 实现 `providers.Provider` 接口 + 一行注册，展示层无需改动
+English | [简体中文](README.zh-CN.md)
 
-## 工作原理
+[![Release](https://img.shields.io/github/v/release/h1origin/liquoten?sort=semver)](https://github.com/h1origin/liquoten/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/h1origin/liquoten/total)](https://github.com/h1origin/liquoten/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/h1origin/liquoten/release.yml?label=build)](https://github.com/h1origin/liquoten/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey)
+![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
+![Swift](https://img.shields.io/badge/Swift-native-F05138?logo=swift&logoColor=white)
 
-```
-百炼 OpenAPI  →  daemon 每 1min 轮询  →  state.json / history.jsonl
-                                                 ↘ 阈值升穿 → notifications.jsonl
-state.json          ← Liquoten.app 只读渲染菜单栏
-notifications.jsonl ← Liquoten.app 消费并投递系统通知
-```
+</div>
 
-一次轮询：对每个到期的 provider 调 `Query()`（默认每 1 分钟，带 ±10% 抖动，可用 `poll_interval` 调整；Claude Code 只读本地文件，最多每分钟一次），结果落盘缓存（原子写）并追加历史，然后过阈值状态机（升穿发一次通知，回落复位，重启后状态不丢）。
+Liquoten shows how much of each LLM plan you have used as a water droplet in the menu bar: the less quota you have left, the lower the water. A small Go daemon reads each provider's usage from local files or read-only endpoints. It never sits in the path of your API requests.
 
-daemon 由 App 作为子进程拉起（意外退出 5 秒后自动重启）；App 只读 daemon 写出的文件，60 秒刷新一次菜单栏，两个进程各管各的，无共享内存。
+## ✨ Features
 
-## 安装
+- **Everything in one place**: Claude Code, ChatGPT Codex, Alibaba Cloud Bailian (Model Studio) Token Plan and Qoder all appear in one panel.
+- **At-a-glance menu bar**: the droplet's water level and color (blue → orange → red) follow your tightest quota, with the used percentage shown next to it.
+- **Trends**: each quota card has a usage chart (per-minute for 5-hour windows, per-day for weekly and monthly windows) and a reset countdown.
+- **Notifications**: you get a macOS notification when a quota drops below 50% and 20% remaining (configurable), when a provider keeps failing, and when a Codex reset credit is about to expire.
+- **Private and lightweight**: data stays on your Mac. Credentials are only read locally or kept in a `0600` config file. Uses about 0% CPU, and the only third-party dependency is a TOML parser.
+- **Native**: a SwiftUI menu bar app, Universal binary (Apple silicon + Intel), with a launch-at-login switch.
 
-### 方式一：下载 dmg（推荐）
+## 📦 Supported providers
 
-到仓库的 [Releases](https://github.com/h1origin/liquoten/releases) 页面下载最新的 `Liquoten-x.y.z.dmg`，双击打开后把 Liquoten 拖进“应用程序”。支持 Apple 芯片与 Intel 芯片，需要 macOS 13 或更高版本。
+| Provider | What is shown | How it is read | Setup |
+|---|---|---|---|
+| **Claude Code** (Pro / Max) | 5-hour and weekly usage | Claude Code's `statusLine` input, saved by `liquoten statusline` | [Add a statusLine command](#claude-code) |
+| **ChatGPT Codex** | 5-hour and weekly usage, credits, reset credits | Local `~/.codex/sessions` logs, corrected hourly against the live usage endpoint with Codex's own login | None |
+| **Alibaba Cloud Bailian** Token Plan | 5-hour / weekly / monthly usage (depends on plan) | Signed Alibaba Cloud OpenAPI call + console gateway | Enter an AccessKey in the Services page |
+| **Qoder / Qoder CN** | Credits used this billing cycle and add-on credits | Personal access token → quota API | Enter a token in the Services page |
 
-dmg 没有经过苹果签名公证，第一次打开会提示“无法验证开发者”，任选一种方式放行：
+## 🚀 Installation
 
-- 打开“系统设置 → 隐私与安全性”，在页面下方找到 Liquoten，点“仍要打开”
-- 或在终端执行 `xattr -dr com.apple.quarantine /Applications/Liquoten.app`
+### Download (recommended)
 
-打开后点菜单栏的水滴图标 → “服务”，选择要监控的服务。监控百炼需要在服务页填写阿里云 AccessKey（建议使用只授予百炼权限的 RAM 子账号）。
+1. Download the latest `Liquoten-x.y.z.dmg` from [Releases](https://github.com/h1origin/liquoten/releases/latest).
+2. Open it and drag **Liquoten** into **Applications**.
+3. The app is not notarized by Apple yet, so macOS will block it the first time it opens. Allow it with either option:
+   - Go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**, or
+   - run:
 
-### 方式二：从源码构建
+     ```bash
+     xattr -dr com.apple.quarantine /Applications/Liquoten.app
+     ```
 
-前置：Go ≥ 1.21（`brew install go`，go.mod 会自动拉取 1.27 工具链）、Xcode Command Line Tools（`xcode-select --install`，编译 Swift 需要）。
+Requires macOS 13 Ventura or later.
+
+### Build from source
+
+Requirements: Go 1.21+ (the 1.27 toolchain is fetched automatically) and Xcode Command Line Tools.
 
 ```bash
-# 1. 配置（可选，默认配置即可跑，见下方"配置"）
-mkdir -p ~/.config/liquoten
-cp config.example.toml ~/.config/liquoten/config.toml
-
-# 2. 构建并安装 App（在仓库根目录执行）
-./app/build.sh
-mv build/Liquoten.app /Applications/      # 建议放 /Applications（"开机自动启动"依赖 bundle 路径稳定）
-
-# 3. 启动
+git clone https://github.com/h1origin/liquoten.git && cd liquoten
+./app/build.sh                         # produces build/Liquoten.app
+mv build/Liquoten.app /Applications/
 open /Applications/Liquoten.app
 ```
 
-首次启动后系统会请求通知权限，允许即可。面板右下角齿轮菜单可勾选"开机自动启动"（SMAppService 登录项，App 自带的开关，无需手写 plist）。
+## 🏁 Quick start
 
-### 发版
+1. Click the droplet in the menu bar, then **Services**.
+2. Turn on the providers you use. Nothing is enabled by default.
+3. Allow notifications when macOS asks.
+4. Optional: turn on **Launch at login** from the gear menu.
 
-推送 `v` 开头的标签即自动发版：GitHub Actions（`.github/workflows/release.yml`）在 macOS 上跑测试，用 `app/package-dmg.sh` 打出通用版本（arm64 + x86_64）的 dmg，并创建同名 Release 附上 dmg 与安装说明。
+### Claude Code
+
+Claude Code passes subscription usage to its [statusLine](https://code.claude.com/docs/en/statusline) command. Point it at Liquoten in `~/.claude/settings.json` (the Services page has a one-click **Copy** button):
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "/Applications/Liquoten.app/Contents/Resources/liquoten statusline"
+}
+```
+
+Claude Code's status bar then shows something like `[Opus] 5h 23% · 周 41%`, and the daemon reads the same snapshot. No OAuth tokens or private APIs are involved. Data updates only while you use Claude Code.
+
+### ChatGPT Codex
+
+No setup needed. Liquoten reads the latest usage from `~/.codex/sessions`.
+- **Hourly correction**: if you are signed in to Codex with ChatGPT, Liquoten also calls the read-only usage endpoint once an hour, so numbers stay current when you have not used the CLI for a while.
+- **Reset credits**: checked every 12 hours. You get a notification when one will expire within 12 hours.
+- **Login**: Liquoten only reads `~/.codex/auth.json`. It never refreshes tokens itself and never redeems reset credits.
+
+### Alibaba Cloud Bailian
+
+Enter an AccessKey ID and Secret on the Bailian row in **Services**. Liquoten checks the key once before saving it.
+- **Use a dedicated key**: we recommend a RAM user with Bailian permissions only.
+- **Storage**: the key is stored in plain text in `~/.config/liquoten/config.toml` (mode `0600`) and is deleted when you turn the service off.
+
+## ⚙️ Configuration
+
+The config file is `~/.config/liquoten/config.toml`. The Services page edits it for you; see [config.example.toml](config.example.toml) for all options.
+
+```toml
+poll_interval = "1m"              # with ±10% jitter
+alert_remaining = [50.0, 20.0]    # notify when remaining drops below these; [] disables
+notify = "app"                    # or "osascript" when running without the app
+
+[providers.codex]                 # a [providers.<name>] table enables a provider
+
+[thresholds.claudecode]           # extra alert points, as used %
+"5-hour quota" = 80.0
+```
+
+| Environment variable | Purpose |
+|---|---|
+| `LIQUOTEN_CONFIG` | Config file path (default `~/.config/liquoten/config.toml`) |
+| `LIQUOTEN_CACHE_DIR` | Cache directory (default `~/.cache/liquoten`) |
+| `CODEX_HOME` | Codex data directory (default `~/.codex`) |
+
+## 🔧 How it works
+
+<p align="center"><img src="docs/liquoten-architecture.png" alt="Architecture" width="720"></p>
+
+```
+providers ──► daemon (polls every ~1 min) ──► state.json / history.jsonl
+                                         └──► notifications.jsonl (threshold crossings)
+Liquoten.app ◄── reads state.json, renders the menu bar, delivers notifications
+```
+
+- **The daemon** is written in Go. The app starts it and restarts it if it exits. It writes results atomically, appends history (kept for 35 days), and runs a small alert state machine. Each alert fires once per threshold and is persisted across restarts.
+- **The app** is written in Swift. It only reads those files, so neither process depends on the other's memory or IPC.
+- **Every provider is normalized** to `Section{Name, UsedPct, Remaining, ResetAt}`, so the UI does not need to know about specific providers.
+
+<details>
+<summary><b>CLI reference</b></summary>
 
 ```bash
-git tag v1.0.0 && git push origin v1.0.0
+liquoten -once                         # poll once and exit
+liquoten providers                     # list providers and status (JSON)
+liquoten enable|disable <provider>     # toggle a provider; disable also removes its keys
+liquoten set-access-key <provider>     # read AccessKey ID and Secret from stdin, verify, save
+liquoten clear-access-key <provider>
+liquoten statusline                    # Claude Code statusLine command
 ```
 
-本地预览 dmg：`./app/package-dmg.sh 1.0.0` → `build/Liquoten-1.0.0.dmg`。
+The binary is at `/Applications/Liquoten.app/Contents/Resources/liquoten`. Flags: `-config`, `-cache-dir`.
 
-监控百炼：在“服务”页百炼那一行填写阿里云 AccessKey ID / Secret（建议使用只授予百炼权限的 RAM 子账号）。AccessKey 以明文保存在 `~/.config/liquoten/config.toml`，关闭服务时删除。
+</details>
 
-## Claude Code 订阅用量
-
-Claude Code 会把订阅用量（`rate_limits.five_hour` / `seven_day` 的 `used_percentage`、`resets_at`）通过 stdin 传给 [statusLine](https://code.claude.com/docs/en/statusline) 命令。`liquoten statusline` 子命令把它落盘到 `~/.cache/liquoten/claudecode.json`，同时在 Claude Code 底部打印 `[Opus 5.5] 5h 23% · 周 41%`；daemon 的 `claudecode` provider 只读这个文件，不碰 OAuth 凭证、不调未公开接口。
-
-1. `~/.claude/settings.json` 加：
-
-   ```json
-   "statusLine": {
-     "type": "command",
-     "command": "/Applications/Liquoten.app/Contents/Resources/liquoten statusline"
-   }
-   ```
-
-2. `~/.config/liquoten/config.toml` 加 `[providers.claudecode]`（阈值见 config.example.toml）
-
-边界：数据只在使用 Claude Code 时更新（会话首次响应后才有）；订阅额度与 claude.ai 网页端共享，只在网页端用时菜单栏会滞后，下次打开 Claude Code 即对齐。窗口过了 `resets_at` 显示 0%。"上次更新"取 statusline 落盘时间。
-
-## 菜单栏
-
-菜单栏显示 Liquoten 的水滴图标，旁边是排在最上面的服务中最紧张一项的已用百分比（该服务出错或无百分比数据时只显示图标；顺序在“服务”页拖动调整，保存在本机）。水滴：水位 = 所有额度中最紧张那一项的**剩余**比例，剩得越少水越低；已用 70–90% 时水变橙色，≥90% 变红色，其余跟随系统黑白；没有数据或全部出错时显示虚线水滴。鼠标悬停显示文字摘要。程序图标（通知、访达）是同一水滴的彩色版，由 `app/icon/` 在打包时生成。
-
-点击图标弹出可视化面板：
-
-- 顶部：所有额度中最高已用比例 + 状态（充足 / 注意 / 紧张）、服务数、更新时间、出错数
-- 按服务分组的额度卡片：已用百分比、走势图、用量条、剩余比例、重置倒计时。走势图按额度类型不同：5 小时额度画当前窗口（开始 → 重置）的分钟级阶梯线；周额度画 7 根立柱，每根是该天（按重置时刻切分）用掉的周额度百分点，没有历史数据的天显示“?”；月度额度画本期（重置时间往前一个月 → 重置）每天一根细柱，同样是当天用掉的百分点，下方标出起止日期和单日最多用量，不混入上一期数据。数据来自 history.jsonl
-- 按住任意服务的卡片上下拖动即可调整顺序（与“服务”页的拖动排序同步）
-- 点击面板以外的任何地方（包括另一块屏幕）面板即收起
-- 出错卡片：把错误翻译成中文提示
-- 底部：刷新（重启 daemon 立即查询）、服务、打开（控制台 / Claude 用量页 / 数据目录）、设置（开机自动启动、检查更新、当前版本、退出）
-- 检查更新：启动后及每 24 小时读取一次 GitHub `releases/latest` 的跳转地址得到最新正式版（不走 api.github.com，避免匿名限流 403），有新版本时菜单栏水滴右上角出现小圆点、面板顶部出现提示，可「下载」（打开 Release 页，下载 dmg 覆盖安装）或「跳过此版本」；齿轮菜单可随时手动检查。只提示，不自动下载替换
-- 服务页：按住每行左侧手柄上下拖动调整顺序，面板与菜单栏百分比都按此顺序；列出所有已实现的服务，开关即写入配置文件并立即重新查询；百炼可在此填写阿里云 AccessKey，Claude Code 可一键复制 statusLine 配置。新装时不启用任何服务，首次打开面板会引导去选择
-
-
-## 通知
-
-默认（`notify = "app"`）daemon 把告警事件追加写入 `~/.cache/liquoten/notifications.jsonl`，由 Liquoten.app 消费并投递系统通知——好处是通知归属 App（图标、通知中心管理都正常），daemon 无需自己弹窗。事件只追加不删除，App 用事件 id 游标去重，重启不重发。
-
-如果不想跑 App（比如走下面的 SwiftBar 路线），配置 `notify = "osascript"` 退回 daemon 自己发通知。
-
-## 配置
-
-见 [config.example.toml](config.example.toml)。默认不启用任何服务：在面板“服务”页打开开关，或在配置里写 `[providers.<name>]`（出现即启用，`enabled = false` 关闭）。默认每项额度（5 小时 / 每周 / 月度）剩余降到 50%、20% 时各发一次系统通知，例如“Claude 5 小时额度剩余不到 20%（已用 83%），14:30 重置”；新周期用量回落后复位。一次跨过多个提醒点只发最紧的一条。用 `alert_remaining = [50.0, 20.0]` 修改提醒点，设为 `[]` 关闭；`[thresholds.<服务>]` 按已用百分比配置的阈值作为额外提醒点。百炼 Token Plan 用量查询使用 `access_key_id` / `access_key_secret`（在服务页填写，或直接写配置文件）；没有填写时状态行会提示去服务页填写。
-
-环境变量：
-
-| 变量 | 作用 |
-|---|---|
-| `LIQUOTEN_CONFIG` | 覆盖默认配置文件路径（`~/.config/liquoten/config.toml`） |
-| `LIQUOTEN_CACHE_DIR` | 覆盖默认缓存目录（`~/.cache/liquoten`） |
-
-daemon flags：`-config`（配置文件）、`-once`（只轮询一次）、`-cache-dir`（缓存目录）。子命令 `liquoten providers` 列出服务及启用状态（JSON），`liquoten enable|disable <provider>` 改写配置文件里的开关（面板“服务”页即调用它们）；`liquoten set-access-key|clear-access-key <provider>` 由服务页填写/清除百炼 AccessKey 时调用。
-
-## 验证
-
-```bash
-go test ./... && go vet ./... && test -z "$(gofmt -l .)"   # 单测 + 静态检查
-
-build/Liquoten.app/Contents/Resources/liquoten -once   # 跑一轮 daemon
-cat ~/.cache/liquoten/state.json                            # 与控制台百分比对比
-```
-
-手工场景：把 `config.toml` 阈值临时调低（如 10%）再 `-once`，应弹系统通知；临时断网，菜单栏应显示错误态。单测覆盖：百炼 JSON 解析、AK/SK 直连（签名固定向量、网关选择、token 缓存与重试，录制 fixture）、阈值状态机（含重启持久化）、store 原子写回读、config 合并、FileNotifier 事件追加。
-
-## 服务开关
-
-App 的“服务”页通过 daemon 子命令改写配置：
-
-- `liquoten enable [-api-key-stdin] <name>`：需要 API Key 的服务（Qoder / Qoder CN）从标准输入读 key 并实际查询一次，验证通过才写入。
-- `liquoten disable <name>`：停用并删除 `api_key`、`access_key_id`、`access_key_secret`。
-- `liquoten set-access-key <name>`：从标准输入读百炼 AccessKey ID / Secret，实际查询一次验证通过后写入配置并启用；`liquoten clear-access-key <name>` 删除这两个键，不改启用状态。
-- 含密钥的配置文件以 0600 权限写入。
-
-## 扩展新 provider
-
-1. 新建 `internal/providers/<name>/<name>.go`，实现 `providers.Provider` 接口并在 `init()` 里 `providers.Register`
-2. 在 `cmd/liquoten/main.go` 里 `import _` 该包（注册入口）
-3. 在 `internal/config/config.go` 的默认阈值里加 `[thresholds.<name>]`；注册后自动出现在面板“服务”页（名称、说明在 `app/Dashboard.swift` 的 `Style.providerTitle` / `providerDescription` 里补）
-
-各 provider 的余额语义不同，统一归一化为 `Section{Name, UsedPct, Remaining, ResetAt}`（无对应语义的字段置 -1）：
-
-| Provider | 查询接口 | 语义 |
-|---|---|---|
-| 百炼 Token Plan | 阿里云 OpenAPI `GenerateCLIAccessToken` + 控制台网关 `/tokenplan/personal/api/v2/usage` | 5h/周/月窗口已用百分比（只展示套餐实际返回的窗口） |
-| Claude Code 订阅 | statusLine stdin 的 `rate_limits`（`liquoten statusline` 落盘） | 5h/周窗口已用百分比 |
-| Qoder / Qoder CN | 个人访问令牌换 job token 后 `GET openapi.qoder.sh` / `openapi.qoder.com.cn` 的 `/api/v2/quota/usage`（未见官方文档，参照社区插件 pi-provider-qoder-cn） | `userQuota`（个人版）或团队版成员的 `orgResourcePackage`（团队共享 Credits）→ 本计费周期 `1-month quota` 已用百分比 + 剩余 Credits；`addOnQuota` → `credits` 余额 |
-| ChatGPT Codex 订阅 | `~/.codex/sessions/**/*.jsonl` 里最新的 `token_count` 事件的 `rate_limits`（`CODEX_HOME` 可覆盖目录） | 按 `window_minutes` 映射窗口（300 → 5h、10080 → 周，其他按时长命名）；credits 余额放 `Remaining` |
-| OpenAI API（按量） | `GET api.openai.com/v1/dashboard/billing/subscription` | hard/soft limit USD |
-| Anthropic API（按量） | Admin API `GET /v1/organizations/cost_report` | 本月累计费用 |
-| DeepSeek | `GET api.deepseek.com/user/balance` | 剩余 CNY |
-| OpenRouter | `GET openrouter.ai/api/v1/credits` | 剩余 credits |
-
-（表内百炼、Claude Code 以外的接口为设计期核对的接入点，实现时需用真实 key 再验证。）
-
-## 项目结构
-
-```
-app/                    Liquoten.app 源码（Swift：菜单栏 + 通知消费 + daemon 看门狗）
-  build.sh              打包脚本（swiftc + go build，产出 build/Liquoten.app；ARCHS/VERSION 可选）
-  package-dmg.sh        发版用：通用版本 + dmg
-.github/workflows/      release.yml：推 v* 标签自动打 dmg 并发布 Release
-cmd/liquoten/           daemon 入口（轮询循环、由 App 或 launchd 常驻）
-internal/config/       配置加载（TOML + 环境变量）
-internal/providers/    Provider 接口 + 注册表
-  bailian/             百炼 adapter（AK/SK 直连 + fixture 单测）
-  claudecode/          Claude Code adapter（statusline 落盘 + 读快照）
-  qoder/               Qoder / Qoder CN adapter（PAT 换 token + 查额度，httptest 单测）
-internal/store/        state.json 原子写 + history.jsonl 追加
-internal/alert/        阈值状态机 + 通知通道（FileNotifier / osascript）
-swiftbar/              菜单栏插件（xbar 协议输出，legacy 路线）
-launchd/               com.liquoten.plist（legacy 路线）
-docs/                  架构图（.excalidraw 可编辑源文件 + PNG 预览）
-```
-
-## 故障排查
-
-| 症状 | 处理 |
-|---|---|
-| 菜单栏显示 `liquoten ✕` | daemon 二进制缺失，App bundle 不完整，重新 `./app/build.sh` |
-| 菜单栏一直 `liquoten` | 等首次轮询（启动即轮询）；仍不行看日志 `tail ~/Library/Logs/liquoten.log` |
-| 百炼报“未配置阿里云 AccessKey” | 在服务页填写阿里云 AccessKey（建议使用只授予百炼权限的 RAM 子账号） |
-| 超阈值但不弹通知 | 系统设置 → 通知里允许 Liquoten；勿扰模式会吞掉通知；`notify` 配置是否被改成了别的值 |
-| 百分比与控制台不一致 | 有最多一个轮询间隔的延迟；菜单里"立即刷新"后对比 |
-| App 退了额度还在记 | 正常：daemon 随 App 退出；如需 App 不在也要监控，走 launchd 路线（见下） |
-
-## legacy 路线：SwiftBar + launchd（不想跑 App 时）
-
-daemon 与 SwiftBar 插件也可以完全脱离 App 运行：
+<details>
+<summary><b>Running without the app (SwiftBar + launchd)</b></summary>
 
 ```bash
 brew install --cask swiftbar
@@ -201,45 +158,83 @@ go build -o ~/.local/bin/liquoten ./cmd/liquoten
 go build -o ~/.local/bin/liquoten-bar ./swiftbar
 ln -s ~/.local/bin/liquoten-bar "$SWIFTBAR_PLUGIN_DIR/liquoten.15m.sh"
 
-# 常驻（开机自启）。plist 里的路径是硬编码的，换机器先替换：
 sed -i '' "s|/Users/lk|$HOME|g" launchd/com.liquoten.plist
 cp launchd/com.liquoten.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.liquoten.plist
 ```
 
-插件文件名后缀控制刷新间隔：`liquoten.15m.sh` = 每 15 分钟执行一次。走这条路线时配置 `notify = "osascript"`，否则告警事件只会写进 jsonl 无人投递。
+Set `notify = "osascript"` so the daemon sends notifications itself.
 
-## 卸载
+</details>
+
+## ❓ FAQ
+
+<details>
+<summary><b>macOS says the app can't be opened / the developer can't be verified</b></summary>
+
+The app is not notarized yet. See the [installation](#-installation) steps above.
+</details>
+
+<details>
+<summary><b>No notifications</b></summary>
+
+Allow Liquoten in **System Settings → Notifications** and check that Focus mode is off. Also check that `notify` in the config is `"app"`.
+</details>
+
+<details>
+<summary><b>Bailian says the AccessKey is missing or not authorised</b></summary>
+
+Enter the key on the Services page. If it is rejected with `NotAuthorised`, grant the RAM user Bailian permissions and wait a few minutes for them to take effect.
+</details>
+
+<details>
+<summary><b>Numbers differ from the provider's console</b></summary>
+
+There can be up to one poll interval of delay. Claude Code data updates only while Claude Code is in use. Codex is corrected against the live data at least once an hour.
+</details>
+
+<details>
+<summary><b>Logs and data</b></summary>
+
+- Logs: `~/Library/Logs/liquoten.log`
+- State: `~/.cache/liquoten/state.json`
+- Config: `~/.config/liquoten/config.toml`
+</details>
+
+<details>
+<summary><b>Uninstall</b></summary>
 
 ```bash
-# App 路线
 osascript -e 'quit app "Liquoten"' && rm -rf /Applications/Liquoten.app
-# launchd 路线（若装过）
-launchctl bootout gui/$(id -u)/com.liquoten
-rm ~/Library/LaunchAgents/com.liquoten.plist ~/.local/bin/liquoten ~/.local/bin/liquoten-bar
-# 数据
 rm -rf ~/.cache/liquoten ~/.config/liquoten
 ```
+</details>
 
-## 设计与边界
+## 🗺️ Roadmap
 
-- **为什么有 AK/SK 直连**：百炼 Token Plan 的额度接口是控制台内部网关（未公开）。liquoten 用阿里云 AK/SK 自己签名换 access token 再查网关，token 过期自动续
-- **Token Plan 没有"绝对剩余 credits"**：官方只暴露滚动窗口的已用百分比，菜单栏展示与官方控制台对齐
-- **通知走文件而不是进程间通信**：daemon 追加写 jsonl、App 定时消费，两端零耦合——任一端挂掉不影响另一端，重启后游标去重不重发
-- **历史数据**：`~/.cache/liquoten/history.jsonl` 只在读数变化时追加，读数不变则每 15 分钟记一条心跳；只保留最近 35 天（daemon 启动时及每天清理一次，够画最长 31 天的月度周期）（v1 用 JSONL 而非 SQLite，零依赖；做趋势看板时再评估迁移）
-- **失败降级**：查询连续失败 3 次告警一次；未配置访问密钥时状态行提示去服务页填写
-- **Free tier**：百炼按模型粒度的免费额度查询留到 v1.1
+- [ ] Bailian usage add-on packages and per-model free quota
+- [ ] Desktop widget (WidgetKit)
+- [ ] Signed and notarized builds, in-app updates
+- [ ] More providers: OpenAI API, Anthropic API, DeepSeek, OpenRouter
 
-## 路线图
+## 🤝 Contributing
 
-- **v1.1**：百炼 free tier 按模型额度展示
-- **v2**：OpenAI / Anthropic / DeepSeek / OpenRouter adapter（接口已核对，每个 1–2 小时）
-- **v3**（可选）：本地网页 dashboard，读 history.jsonl 看趋势；届时再评估引入 SQLite
+Issues and pull requests are welcome.
 
-## 调试
+**Adding a provider:**
+1. Create `internal/providers/<name>/` and implement `providers.Provider`.
+2. Call `providers.Register` in `init()`.
+3. Add a blank import in `cmd/liquoten/main.go`.
+4. Add a parsing test with a recorded fixture in `testdata/`.
+
+See [AGENTS.md](AGENTS.md) for layering and conventions. Before opening a PR, run:
 
 ```bash
-liquoten -once                 # 只轮询一次（build/Liquoten.app/Contents/Resources/liquoten）
-tail -f ~/Library/Logs/liquoten.log
-cat ~/.cache/liquoten/state.json
+go test ./... && go vet ./... && test -z "$(gofmt -l .)"
 ```
+
+Pushing a `v*` tag builds a Universal dmg and publishes a GitHub Release ([release.yml](.github/workflows/release.yml)).
+
+## 📄 License
+
+[MIT](LICENSE) © 2026 Origin
