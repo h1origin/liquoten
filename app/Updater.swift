@@ -5,7 +5,7 @@ struct AvailableUpdate: Equatable {
     let url: URL
 }
 
-// 查询 GitHub Releases 最新正式版，与当前版本比较；只提示，不自动下载安装。
+// 查询 GitHub Releases 最新正式版，与当前版本比较；下载、校验和安装由 Installer 处理。
 // 不走 api.github.com（匿名每小时 60 次，共用出口 IP 时容易 403），而是读
 // releases/latest 的 302 跳转地址 …/releases/tag/vX.Y.Z 得到最新版本号。
 final class Updater: NSObject, URLSessionTaskDelegate {

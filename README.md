@@ -26,6 +26,7 @@ liquoten shows how much of each LLM plan you have used as a water droplet in the
 - **At-a-glance menu bar**: the droplet's water level and color (blue → orange → red) follow your tightest quota, with the used percentage shown next to it.
 - **Trends**: each quota card has a usage chart (per-minute for 5-hour windows, per-day for weekly and monthly windows) and a reset countdown.
 - **Notifications**: you get a macOS notification when a quota drops below 50% and 20% remaining (configurable), when a provider keeps failing, and when a Codex reset credit is about to expire.
+- **In-app updates**: downloads the release dmg, checks its SHA-256, replaces the app and relaunches itself. Browser-downloaded first installs still need the one-time Gatekeeper approval.
 - **Private and lightweight**: data stays on your Mac. Credentials are only read locally or kept in a `0600` config file. Uses about 0% CPU, and the only third-party dependency is a TOML parser.
 - **Native**: a SwiftUI menu bar app, Universal binary (Apple silicon + Intel), with a launch-at-login switch.
 
@@ -172,7 +173,7 @@ Set `notify = "osascript"` so the daemon sends notifications itself.
 <details>
 <summary><b>macOS says the app can't be opened / the developer can't be verified</b></summary>
 
-The app is not notarized yet. See the [installation](#-installation) steps above.
+The app is not notarized yet. See the [installation](#-installation) steps above. The first install from a browser-downloaded dmg still needs this one-time approval. Updates installed from inside liquoten are not quarantined by macOS, so they are not blocked.
 </details>
 
 <details>
@@ -214,7 +215,7 @@ rm -rf ~/.cache/liquoten ~/.config/liquoten
 
 - [ ] Bailian usage add-on packages and per-model free quota
 - [ ] Desktop widget (WidgetKit)
-- [ ] Signed and notarized builds, in-app updates
+- [ ] Signed and notarized builds
 - [ ] More providers: OpenAI API, Anthropic API, DeepSeek, OpenRouter
 
 ## 🤝 Contributing

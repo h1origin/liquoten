@@ -32,6 +32,7 @@ liquoten 在菜单栏用一滴水显示各个大模型套餐用了多少：剩�
 - **隐私、轻量**：
   - 数据只留在本机。凭据只在本地读取，或保存在权限为 `0600` 的配置文件里。
   - CPU 占用几乎为 0，唯一的第三方依赖是 TOML 解析库。
+- **App 内更新**：下载 Release 的 dmg、校验 SHA-256，然后替换自身并重新启动。首次从浏览器下载安装仍需放行一次，之后 App 内更新不会再被系统拦下。
 - **原生应用**：SwiftUI 菜单栏 App，通用二进制，同时支持 Apple 芯片和 Intel。带开机自启开关。
 
 ## 📦 支持的服务
@@ -182,7 +183,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.liquoten.plist
 <details>
 <summary><b>提示「无法验证开发者」或打不开</b></summary>
 
-目前还没有签名公证，按上面[安装](#-安装)里的方法放行即可。
+目前还没有签名公证，按上面[安装](#-安装)里的方法放行即可。首次从浏览器下载的 dmg 仍需这样放行一次；之后通过 liquoten 的 App 内更新安装的版本不会被系统隔离。
 </details>
 
 <details>
@@ -228,7 +229,7 @@ rm -rf ~/.cache/liquoten ~/.config/liquoten
 
 - [ ] 百炼用量包余额、按模型的免费额度
 - [ ] 桌面小组件（WidgetKit）
-- [ ] 签名公证、App 内升级
+- [ ] 签名公证
 - [ ] 更多服务：OpenAI API、Anthropic API、DeepSeek、OpenRouter
 
 ## 🤝 参与贡献

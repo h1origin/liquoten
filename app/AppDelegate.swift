@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         model.onClearAccessKey = { [weak self] name in self?.clearAccessKey(name) }
         model.onCheckUpdate = { [weak self] in self?.checkUpdate(manual: true) }
+        model.onInstallUpdate = { [weak self] in self?.installAvailableUpdate() }
         model.onSkipUpdate = { [weak self] in self?.skipUpdate() }
         model.onReorder = { [weak self] in self?.rebuildUI() }
 
@@ -44,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
 
         notifier.requestAuthorization()
+        syncLoginItemWanted()
         daemon.start()
         refresh()
         loadProviders()
@@ -218,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     // 自动检查每 24 小时一次，跳过的版本不再提示；手动检查总是查询并弹窗告知结果。
     private func checkUpdate(manual: Bool) {
-        guard !model.checkingUpdate, manual || updater.isDue else { return }
+        guard !model.updating, !model.checkingUpdate, manual || updater.isDue else { return }
         model.checkingUpdate = true
         updater.check { [weak self] result in
             guard let self else { return }
@@ -243,18 +245,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "有新版本 v\(update.version)"
-        alert.informativeText = "当前版本 v\(Updater.currentVersion)。下载新的 dmg 后，把 liquoten 拖进「应用程序」覆盖旧版即可。"
-        alert.addButton(withTitle: "下载")
+        alert.informativeText = "当前版本 v\(Updater.currentVersion)。点「立即更新」会自动下载、校验并替换，完成后重新打开 liquoten。"
+        alert.addButton(withTitle: "立即更新")
         alert.addButton(withTitle: "稍后")
         alert.addButton(withTitle: "跳过此版本")
         switch alert.runModal() {
-        case .alertFirstButtonReturn: NSWorkspace.shared.open(update.url)
+        case .alertFirstButtonReturn: installUpdate(update)
         case .alertThirdButtonReturn: skipUpdate()
         default: break
         }
     }
 
+    private func installAvailableUpdate() {
+        guard let update = model.update else { return }
+        installUpdate(update)
+    }
+
+    private func installUpdate(_ update: AvailableUpdate) {
+        guard !model.updating else { return }
+        let appURL = Bundle.main.bundleURL
+        guard Installer.canAutoUpdate(appPath: appURL) else {
+            showUpdateFallback(update.url)
+            return
+        }
+        model.updating = true
+        model.updatePhase = "正在下载…"
+        model.updateProgress = nil
+        Installer.install(
+            version: update.version,
+            currentAppURL: appURL,
+            progress: { [weak self] value in self?.model.updateProgress = value },
+            phase: { [weak self] text in
+                self?.model.updatePhase = text
+                if text == "正在安装…" { self?.model.updateProgress = nil }
+            },
+            completion: { [weak self] result in
+                guard let self else { return }
+                self.model.updating = false
+                self.model.updateProgress = nil
+                self.model.updatePhase = nil
+                switch result {
+                case .success(let installed):
+                    do {
+                        try Installer.relaunch(appURL: installed)
+                        NSApp.terminate(nil)
+                    } catch {
+                        self.showUpdateError("更新已安装，但自动重启失败：\(error.localizedDescription)", releasePage: update.url)
+                    }
+                case .failure(let error):
+                    self.showUpdateError(error.localizedDescription, releasePage: update.url)
+                }
+            }
+        )
+    }
+
+    private func showUpdateFallback(_ releasePage: URL) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "无法自动更新"
+        alert.informativeText = "无法自动更新：请把 liquoten 拖到「应用程序」文件夹后再试，或手动下载新版。"
+        alert.addButton(withTitle: "打开下载页面")
+        alert.addButton(withTitle: "取消")
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(releasePage)
+        }
+    }
+
+    private func showUpdateError(_ message: String, releasePage: URL) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "自动更新失败"
+        alert.informativeText = message + "\n\n也可以打开下载页面手动安装。"
+        alert.addButton(withTitle: "打开下载页面")
+        alert.addButton(withTitle: "取消")
+        if alert.runModal() == .alertFirstButtonReturn {
+            NSWorkspace.shared.open(releasePage)
+        }
+    }
+
     private func skipUpdate() {
+        guard !model.updating else { return }
         updater.skippedVersion = model.update?.version
         model.update = nil
         rebuildUI()
@@ -394,18 +466,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func toggleLoginItem() {
         if #available(macOS 13.0, *) {
+            let wanted = !Self.loginItemEnabled()
             do {
-                if Self.loginItemEnabled() {
-                    try SMAppService.mainApp.unregister()
-                } else {
+                if wanted {
                     try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
                 }
+                UserDefaults.standard.set(wanted, forKey: Self.loginItemWantedKey)
                 rebuildUI()
             } catch {
                 let alert = NSAlert()
                 alert.messageText = "开机自启设置失败"
                 alert.informativeText = error.localizedDescription
                 alert.runModal()
+            }
+        }
+    }
+
+    private static let loginItemWantedKey = "loginItem.wanted"
+
+    private func syncLoginItemWanted() {
+        if #available(macOS 13.0, *) {
+            let defaults = UserDefaults.standard
+            if let wanted = defaults.object(forKey: Self.loginItemWantedKey) as? Bool {
+                if wanted && !Self.loginItemEnabled() {
+                    do {
+                        try SMAppService.mainApp.register()
+                    } catch {
+                        NSLog("恢复开机自启失败: \(error)")
+                    }
+                }
+            } else {
+                defaults.set(Self.loginItemEnabled(), forKey: Self.loginItemWantedKey)
             }
         }
     }

@@ -17,5 +17,7 @@ cp -R "build/$APP_NAME.app" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 rm -f "$DMG"
 hdiutil create -volname "$APP_NAME $VERSION" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG" >/dev/null
+shasum -a 256 "$DMG" > "$DMG.sha256"
 
 echo "==> 完成: ${DMG}（$(du -h "$DMG" | cut -f1)）"
+echo "==> 校验: ${DMG}.sha256"

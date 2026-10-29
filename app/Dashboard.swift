@@ -16,6 +16,9 @@ final class DashboardModel: ObservableObject {
     @Published var draggingProvider: String?
     @Published var checkingUpdate = false
     @Published var refreshing = false
+    @Published var updating = false
+    @Published var updateProgress: Double?
+    @Published var updatePhase: String?
 
     var onRefresh: () -> Void = {}
     var onOpenURL: (URL) -> Void = { _ in }
@@ -26,6 +29,7 @@ final class DashboardModel: ObservableObject {
     var onSetAccessKey: (String, String, String, @escaping (Bool) -> Void) -> Void = { _, _, _, completion in completion(false) }
     var onClearAccessKey: (String) -> Void = { _ in }
     var onCheckUpdate: () -> Void = {}
+    var onInstallUpdate: () -> Void = {}
     var onSkipUpdate: () -> Void = {}
     var onReorder: () -> Void = {}
 
@@ -612,13 +616,31 @@ struct UpdateBanner: View {
                 Spacer()
                 Text("当前 v\(Updater.currentVersion)").font(.caption).foregroundStyle(.secondary)
             }
+            if model.updating {
+                HStack(spacing: 8) {
+                    if let progress = model.updateProgress {
+                        ProgressView(value: progress)
+                            .frame(width: 100)
+                        Text("\(model.updatePhase ?? "") \(Int((progress * 100).rounded()))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ProgressView().controlSize(.small)
+                        Text(model.updatePhase ?? "正在更新…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
             HStack(spacing: 10) {
-                Button("下载") { model.onOpenURL(update.url) }
+                Button("立即更新", action: model.onInstallUpdate)
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                    .disabled(model.updating)
                 Button("跳过此版本", action: model.onSkipUpdate)
                     .buttonStyle(.borderless)
                     .controlSize(.small)
+                    .disabled(model.updating)
             }
         }
     }

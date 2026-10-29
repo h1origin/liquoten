@@ -10,7 +10,7 @@ APP="$BUILD_DIR/$APP_NAME.app"
 HOST_ARCH="$(uname -m)"
 ARCHS="${ARCHS:-$HOST_ARCH}"
 SOURCES=(app/main.swift app/Models.swift app/DaemonManager.swift
-  app/NotificationConsumer.swift app/Updater.swift app/Gourd.swift app/Dashboard.swift app/AppDelegate.swift)
+  app/NotificationConsumer.swift app/Updater.swift app/Installer.swift app/Gourd.swift app/Dashboard.swift app/AppDelegate.swift)
 
 echo "==> 清理旧产物"
 rm -rf "$APP"
