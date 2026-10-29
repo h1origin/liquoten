@@ -166,6 +166,72 @@ func TestNilNotifierSilent(t *testing.T) {
 	}
 }
 
+func TestResetCreditsExpiryAlert(t *testing.T) {
+	dir := t.TempDir()
+	r := &recorder{}
+	now := time.Date(2026, 10, 14, 9, 0, 0, 0, time.Local)
+	e, err := New(nil, nil, dir, r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.now = func() time.Time { return now }
+	bal := func(reset time.Time, remaining float64) providers.Balance {
+		return providers.Balance{
+			Provider:  "codex",
+			FetchedAt: now,
+			Sections:  []providers.Section{{Name: "reset-credits", UsedPct: -1, Remaining: remaining, ResetAt: reset}},
+		}
+	}
+
+	thirteenHours := time.Date(2026, 10, 14, 22, 0, 0, 0, time.Local)
+	if err := e.Check([]providers.Balance{bal(thirteenHours, 1)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 0 {
+		t.Fatalf("fired = %v, want 0 for 13 hours", r.fired)
+	}
+
+	elevenHours := time.Date(2026, 10, 14, 20, 0, 0, 0, time.Local)
+	if err := e.Check([]providers.Balance{bal(elevenHours, 1)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 1 || r.fired[0] != "额度提醒: Codex 有重置卡将于 20:00 过期，可在 Codex 桌面 App 里使用" {
+		t.Fatalf("fired = %v", r.fired)
+	}
+	if err := e.Check([]providers.Balance{bal(elevenHours, 1)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 1 {
+		t.Fatalf("fired = %v, want 1 before restart", r.fired)
+	}
+
+	e2, err := New(nil, nil, dir, r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e2.now = func() time.Time { return now }
+	if err := e2.Check([]providers.Balance{bal(elevenHours, 1)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 1 {
+		t.Fatalf("fired = %v, want 1 after restart", r.fired)
+	}
+
+	otherExpiry := time.Date(2026, 10, 14, 20, 30, 0, 0, time.Local)
+	if err := e2.Check([]providers.Balance{bal(otherExpiry, 1)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 2 || r.fired[1] != "额度提醒: Codex 有重置卡将于 20:30 过期，可在 Codex 桌面 App 里使用" {
+		t.Fatalf("fired = %v", r.fired)
+	}
+	if err := e2.Check([]providers.Balance{bal(elevenHours, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := sectionName("reset-credits"); got != "重置卡" {
+		t.Fatalf("sectionName(reset-credits) = %q", got)
+	}
+}
+
 func TestFileNotifierAppendsEvents(t *testing.T) {
 	dir := t.TempDir()
 	n, err := FileNotifier(dir)

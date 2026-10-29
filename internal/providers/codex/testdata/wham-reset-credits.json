@@ -1,0 +1,55 @@
+{
+  "credits": [
+    {
+      "id": "RateLimitResetCredit_test1",
+      "reset_type": "codex_rate_limits",
+      "is_supported_by_plan": true,
+      "status": "available",
+      "granted_at": "2026-09-29T19:09:27.129540Z",
+      "expires_at": "2026-10-20T12:00:00Z",
+      "redeemed_at": null,
+      "title": "Full reset"
+    },
+    {
+      "id": "RateLimitResetCredit_test2",
+      "reset_type": "codex_rate_limits",
+      "is_supported_by_plan": true,
+      "status": "available",
+      "granted_at": "2026-09-29T19:09:27.129540Z",
+      "expires_at": "2026-10-15T12:00:00Z",
+      "redeemed_at": null,
+      "title": "Full reset"
+    },
+    {
+      "id": "RateLimitResetCredit_test3",
+      "reset_type": "codex_rate_limits",
+      "is_supported_by_plan": true,
+      "status": "redeemed",
+      "granted_at": "2026-09-29T19:09:27.129540Z",
+      "expires_at": "2026-10-30T12:00:00Z",
+      "redeemed_at": "2026-10-01T12:00:00Z",
+      "title": "Full reset"
+    },
+    {
+      "id": "RateLimitResetCredit_test4",
+      "reset_type": "codex_rate_limits",
+      "is_supported_by_plan": false,
+      "status": "available",
+      "granted_at": "2026-09-29T19:09:27.129540Z",
+      "expires_at": "2026-10-30T12:00:00Z",
+      "redeemed_at": null,
+      "title": "Full reset"
+    },
+    {
+      "id": "RateLimitResetCredit_test5",
+      "reset_type": "codex_rate_limits",
+      "is_supported_by_plan": true,
+      "status": "available",
+      "granted_at": "2026-09-01T12:00:00Z",
+      "expires_at": "2026-10-01T12:00:00Z",
+      "redeemed_at": null,
+      "title": "Full reset"
+    }
+  ],
+  "available_count": 2
+}

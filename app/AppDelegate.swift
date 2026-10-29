@@ -186,6 +186,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         case "5-hour quota": return "5 小时额度"
         case "1-week quota": return "每周额度"
         case "1-month quota": return "月度额度"
+        case "reset-credits": return "重置卡"
         case "credits": return "Credits 余额"
         default: return name
         }

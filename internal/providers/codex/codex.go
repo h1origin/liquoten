@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,10 +25,32 @@ const Name = "codex"
 
 const maxFilesScanned = 5
 
+const defaultTimeout = 20 * time.Second
+
+const defaultBaseURL = "https://chatgpt.com/backend-api"
+
+const usagePath = "/wham/usage"
+
+const resetCreditsPath = "/wham/rate-limit-reset-credits"
+
+const usageInterval = time.Hour
+
+const resetCreditsInterval = 12 * time.Hour
+
+var errNoAuth = errors.New("没有 Codex 登录凭据")
+
 type Provider struct {
-	home  string
-	now   func() time.Time
-	cache map[string]cached
+	home               string
+	now                func() time.Time
+	cache              map[string]cached
+	timeout            time.Duration
+	baseURL            string
+	lastUsageAttempt   time.Time
+	liveUsage          *rateLimits
+	liveUsageAt        time.Time
+	lastResetAttempt   time.Time
+	resetCredits       []resetCredit
+	resetCreditsLoaded bool
 }
 
 type cached struct {
@@ -35,9 +59,46 @@ type cached struct {
 	ev   *event
 }
 
+type authFile struct {
+	Tokens struct {
+		AccessToken string `json:"access_token"`
+		AccountID   string `json:"account_id"`
+	} `json:"tokens"`
+}
+
+type authCredentials struct {
+	accessToken string
+	accountID   string
+}
+
+type liveUsageResponse struct {
+	PlanType  string `json:"plan_type"`
+	RateLimit struct {
+		Primary   *liveWindow `json:"primary_window"`
+		Secondary *liveWindow `json:"secondary_window"`
+	} `json:"rate_limit"`
+	Credits *credits `json:"credits"`
+}
+
+type liveWindow struct {
+	UsedPercent        *float64 `json:"used_percent"`
+	LimitWindowSeconds int64    `json:"limit_window_seconds"`
+	ResetAt            int64    `json:"reset_at"`
+}
+
+type resetCreditsResponse struct {
+	Credits []resetCredit `json:"credits"`
+}
+
+type resetCredit struct {
+	Status            string    `json:"status"`
+	IsSupportedByPlan bool      `json:"is_supported_by_plan"`
+	ExpiresAt         time.Time `json:"expires_at"`
+}
+
 func init() {
 	providers.Register(Name, func(opts providers.Options) (providers.Provider, error) {
-		return New(DefaultHome()), nil
+		return newProvider(DefaultHome(), opts.Timeout), nil
 	})
 }
 
@@ -53,41 +114,206 @@ func DefaultHome() string {
 }
 
 func New(home string) *Provider {
-	return &Provider{home: home, now: time.Now, cache: map[string]cached{}}
+	return newProvider(home, 0)
+}
+
+func newProvider(home string, timeout time.Duration) *Provider {
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	return &Provider{
+		home:    home,
+		now:     time.Now,
+		cache:   map[string]cached{},
+		timeout: timeout,
+		baseURL: defaultBaseURL,
+	}
 }
 
 func (p *Provider) Name() string { return Name }
 
 func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
-	bal := providers.Balance{Provider: Name, FetchedAt: p.now()}
+	now := p.now()
+	bal := providers.Balance{Provider: Name, FetchedAt: now}
 
+	localEv, localErr := p.latestLocal(ctx)
+	if ctx.Err() != nil {
+		return bal, ctx.Err()
+	}
+	p.refreshLiveUsage(ctx, now)
+	p.refreshResetCredits(ctx, now)
+
+	var rl *rateLimits
+	var ts time.Time
+	switch {
+	case localEv != nil && (p.liveUsage == nil || !p.liveUsageAt.After(localEv.Timestamp)):
+		rl, ts = localEv.Payload.RateLimits, localEv.Timestamp
+	case p.liveUsage != nil:
+		rl, ts = p.liveUsage, p.liveUsageAt
+	}
+	if rl == nil {
+		if localErr != nil {
+			return bal, localErr
+		}
+		return bal, errors.New("尚无数据：需要先在 Codex 里对话一次（数据来自 ~/.codex/sessions）")
+	}
+
+	bal.FetchedAt = ts
+	bal.Sections = sections(rl, ts, now)
+	if len(bal.Sections) == 0 {
+		return bal, errors.New("Codex 会话记录里没有用量窗口数据")
+	}
+	if p.resetCreditsLoaded {
+		count, earliest := availableResetCredits(p.resetCredits, now)
+		bal.Sections = append(bal.Sections, providers.Section{
+			Name:      "reset-credits",
+			UsedPct:   -1,
+			Remaining: float64(count),
+			ResetAt:   earliest,
+		})
+	}
+	return bal, nil
+}
+
+func (p *Provider) latestLocal(ctx context.Context) (*event, error) {
 	files, err := p.recentSessions()
 	if err != nil {
-		return bal, err
+		return nil, err
 	}
 	var ev *event
 	for _, f := range files {
 		if ctx.Err() != nil {
-			return bal, ctx.Err()
+			return nil, ctx.Err()
 		}
 		ev, err = p.lastRateLimits(f)
 		if err != nil {
-			return bal, err
+			return nil, err
 		}
 		if ev != nil {
-			break
+			return ev, nil
 		}
 	}
-	if ev == nil {
-		return bal, errors.New("尚无数据：需要先在 Codex 里对话一次（数据来自 ~/.codex/sessions）")
-	}
+	return nil, errors.New("尚无数据：需要先在 Codex 里对话一次（数据来自 ~/.codex/sessions）")
+}
 
-	bal.FetchedAt = ev.Timestamp
-	bal.Sections = sections(ev.Payload.RateLimits, ev.Timestamp, p.now())
-	if len(bal.Sections) == 0 {
-		return bal, errors.New("Codex 会话记录里没有用量窗口数据")
+func (p *Provider) readAuth() (authCredentials, bool) {
+	data, err := os.ReadFile(filepath.Join(p.home, "auth.json"))
+	if err != nil {
+		return authCredentials{}, false
 	}
-	return bal, nil
+	var a authFile
+	if err := json.Unmarshal(data, &a); err != nil || a.Tokens.AccessToken == "" {
+		return authCredentials{}, false
+	}
+	return authCredentials{accessToken: a.Tokens.AccessToken, accountID: a.Tokens.AccountID}, true
+}
+
+func (p *Provider) getJSON(ctx context.Context, path string, out any) error {
+	auth, ok := p.readAuth()
+	if !ok {
+		return errNoAuth
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, strings.TrimRight(p.baseURL, "/")+path, nil)
+	if err != nil {
+		return fmt.Errorf("构造请求失败: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+auth.accessToken)
+	if auth.accountID != "" {
+		req.Header.Set("ChatGPT-Account-Id", auth.accountID)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "liquoten")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return fmt.Errorf("读取响应失败: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP %s", resp.Status)
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("解析响应失败: %w", err)
+	}
+	return nil
+}
+
+func (p *Provider) refreshLiveUsage(ctx context.Context, now time.Time) {
+	if !p.lastUsageAttempt.IsZero() && now.Sub(p.lastUsageAttempt) < usageInterval {
+		return
+	}
+	var usage liveUsageResponse
+	if err := p.getJSON(ctx, usagePath, &usage); err != nil {
+		if errors.Is(err, errNoAuth) {
+			return
+		}
+		p.lastUsageAttempt = now
+		log.Printf("codex 实时额度查询失败: %v", err)
+		return
+	}
+	p.lastUsageAttempt = now
+	p.liveUsage = usage.rateLimits()
+	p.liveUsageAt = now
+}
+
+func (p *Provider) refreshResetCredits(ctx context.Context, now time.Time) {
+	if !p.lastResetAttempt.IsZero() && now.Sub(p.lastResetAttempt) < resetCreditsInterval {
+		return
+	}
+	var credits resetCreditsResponse
+	if err := p.getJSON(ctx, resetCreditsPath, &credits); err != nil {
+		if errors.Is(err, errNoAuth) {
+			return
+		}
+		p.lastResetAttempt = now
+		log.Printf("codex 重置卡查询失败: %v", err)
+		return
+	}
+	p.lastResetAttempt = now
+	p.resetCredits = credits.Credits
+	p.resetCreditsLoaded = true
+}
+
+func (u liveUsageResponse) rateLimits() *rateLimits {
+	rl := &rateLimits{PlanType: u.PlanType, Credits: u.Credits}
+	rl.Primary = liveWindowToWindow(u.RateLimit.Primary)
+	rl.Secondary = liveWindowToWindow(u.RateLimit.Secondary)
+	return rl
+}
+
+func liveWindowToWindow(w *liveWindow) *window {
+	if w == nil {
+		return nil
+	}
+	return &window{
+		UsedPercent:   w.UsedPercent,
+		WindowMinutes: int(w.LimitWindowSeconds / 60),
+		ResetsAt:      w.ResetAt,
+	}
+}
+
+func availableResetCredits(credits []resetCredit, now time.Time) (int, time.Time) {
+	count := 0
+	var earliest time.Time
+	for _, c := range credits {
+		if c.Status != "available" || !c.IsSupportedByPlan {
+			continue
+		}
+		if c.ExpiresAt.IsZero() || !c.ExpiresAt.After(now) {
+			continue
+		}
+		count++
+		if earliest.IsZero() || c.ExpiresAt.Before(earliest) {
+			earliest = c.ExpiresAt
+		}
+	}
+	return count, earliest
 }
 
 type fileInfo struct {

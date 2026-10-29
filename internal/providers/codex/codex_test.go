@@ -2,9 +2,13 @@ package codex
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -106,5 +110,415 @@ func TestQueryWithoutSessions(t *testing.T) {
 func TestRegistered(t *testing.T) {
 	if _, err := providers.New(Name, providers.Options{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func tempHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	data, err := os.ReadFile(filepath.Join("testdata", "home", "sessions", "2026", "10", "13", "rollout-weekly.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, "sessions", "2026", "10", "13", "rollout-weekly.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 13, 1, 43, 0, 0, time.UTC)
+	if err := os.Chtimes(path, at, at); err != nil {
+		t.Fatal(err)
+	}
+	return home
+}
+
+func writeTestAuth(t *testing.T, home, token, account string) {
+	t.Helper()
+	data := fmt.Sprintf(`{"tokens":{"access_token":%q,"account_id":%q}}`, token, account)
+	if err := os.WriteFile(filepath.Join(home, "auth.json"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testdata(t *testing.T, name string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+func guardConsume(t *testing.T, r *http.Request) {
+	t.Helper()
+	if strings.Contains(r.URL.Path, "/consume") {
+		t.Fatal("测试不允许请求重置卡 consume 接口")
+	}
+}
+
+func resetSection(t *testing.T, sections []providers.Section) providers.Section {
+	t.Helper()
+	for _, s := range sections {
+		if s.Name == "reset-credits" {
+			return s
+		}
+	}
+	t.Fatalf("sections = %+v, want reset-credits", sections)
+	return providers.Section{}
+}
+
+func TestLiveUsageMapping(t *testing.T) {
+	home := t.TempDir()
+	writeTestAuth(t, home, "token-1", "account-1")
+	now := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	usageBody := testdata(t, "wham-usage.json")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guardConsume(t, r)
+		if r.URL.Path != usagePath {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write(usageBody)
+	}))
+	defer server.Close()
+
+	p := newProvider(home, 0)
+	p.now = func() time.Time { return now }
+	p.lastResetAttempt = now
+	p.baseURL = server.URL
+	bal, err := p.Query(context.Background())
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if !bal.FetchedAt.Equal(now) {
+		t.Fatalf("FetchedAt = %v, want %v", bal.FetchedAt, now)
+	}
+	if len(bal.Sections) != 2 {
+		t.Fatalf("Sections = %+v, want week + credits", bal.Sections)
+	}
+	w := bal.Sections[0]
+	if w.Name != "1-week quota" || w.UsedPct != 53 || w.Remaining != -1 {
+		t.Fatalf("week = %+v", w)
+	}
+	if !w.ResetAt.Equal(time.Unix(1793781560, 0)) {
+		t.Fatalf("ResetAt = %v", w.ResetAt)
+	}
+	c := bal.Sections[1]
+	if c.Name != "credits" || c.UsedPct != -1 || c.Remaining != 62500 {
+		t.Fatalf("credits = %+v", c)
+	}
+}
+
+func TestUsageDataSelection(t *testing.T) {
+	localTime := time.Date(2026, 10, 12, 17, 43, 3, 505000000, time.UTC)
+	usageBody := testdata(t, "wham-usage.json")
+	cases := []struct {
+		name        string
+		home        string
+		now         time.Time
+		wantPct     float64
+		wantFetched time.Time
+	}{
+		{"local newer", tempHome(t), time.Date(2026, 10, 12, 17, 0, 0, 0, time.UTC), 6, localTime},
+		{"live newer", tempHome(t), time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC), 53, time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)},
+		{"no local", t.TempDir(), time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC), 53, time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			writeTestAuth(t, c.home, "token-1", "account-1")
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				guardConsume(t, r)
+				if r.URL.Path != usagePath {
+					http.NotFound(w, r)
+					return
+				}
+				w.Write(usageBody)
+			}))
+			defer server.Close()
+
+			p := newProvider(c.home, 0)
+			p.now = func() time.Time { return c.now }
+			p.lastResetAttempt = c.now
+			p.baseURL = server.URL
+			bal, err := p.Query(context.Background())
+			if err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if len(bal.Sections) == 0 || bal.Sections[0].UsedPct != c.wantPct {
+				t.Fatalf("Sections = %+v, want first pct %v", bal.Sections, c.wantPct)
+			}
+			if !bal.FetchedAt.Equal(c.wantFetched) {
+				t.Fatalf("FetchedAt = %v, want %v", bal.FetchedAt, c.wantFetched)
+			}
+		})
+	}
+}
+
+func TestLiveUsageFrequency(t *testing.T) {
+	home := t.TempDir()
+	writeTestAuth(t, home, "token-1", "account-1")
+	t0 := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	now := t0
+	var mu sync.Mutex
+	calls := 0
+	usageBody := testdata(t, "wham-usage.json")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guardConsume(t, r)
+		if r.URL.Path != usagePath {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		w.Write(usageBody)
+	}))
+	defer server.Close()
+
+	p := newProvider(home, 0)
+	p.now = func() time.Time { return now }
+	p.lastResetAttempt = t0
+	p.baseURL = server.URL
+	query := func() {
+		t.Helper()
+		if _, err := p.Query(context.Background()); err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+	}
+	query()
+	now = t0.Add(30 * time.Minute)
+	query()
+	mu.Lock()
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1 within one hour", calls)
+	}
+	mu.Unlock()
+	now = t0.Add(time.Hour)
+	query()
+	mu.Lock()
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2 after one hour", calls)
+	}
+	mu.Unlock()
+}
+
+func TestResetCreditsCachingAndExpiry(t *testing.T) {
+	home := tempHome(t)
+	writeTestAuth(t, home, "token-1", "account-1")
+	t0 := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	now := t0
+	var mu sync.Mutex
+	resetCalls := 0
+	resetBody := testdata(t, "wham-reset-credits.json")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guardConsume(t, r)
+		if r.URL.Path != resetCreditsPath {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		resetCalls++
+		mu.Unlock()
+		w.Write(resetBody)
+	}))
+	defer server.Close()
+
+	p := newProvider(home, 0)
+	p.now = func() time.Time { return now }
+	p.baseURL = server.URL
+	check := func(wantCount int, wantReset time.Time, wantCalls int) {
+		t.Helper()
+		p.lastUsageAttempt = now
+		bal, err := p.Query(context.Background())
+		if err != nil {
+			t.Fatalf("Query: %v", err)
+		}
+		sec := resetSection(t, bal.Sections)
+		if int(sec.Remaining) != wantCount {
+			t.Fatalf("remaining = %v, want %d", sec.Remaining, wantCount)
+		}
+		if wantReset.IsZero() {
+			if !sec.ResetAt.IsZero() {
+				t.Fatalf("ResetAt = %v, want zero", sec.ResetAt)
+			}
+		} else if !sec.ResetAt.Equal(wantReset) {
+			t.Fatalf("ResetAt = %v, want %v", sec.ResetAt, wantReset)
+		}
+		mu.Lock()
+		if resetCalls != wantCalls {
+			t.Fatalf("reset calls = %d, want %d", resetCalls, wantCalls)
+		}
+		mu.Unlock()
+	}
+
+	firstExpiry := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	secondExpiry := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	check(2, firstExpiry, 1)
+	now = t0.Add(time.Hour)
+	check(2, firstExpiry, 1)
+	now = time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	check(1, secondExpiry, 2)
+	now = time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
+	check(0, time.Time{}, 3)
+}
+
+func TestNoAuthSkipsLiveRequests(t *testing.T) {
+	for _, name := range []string{"no auth file", "empty access token"} {
+		t.Run(name, func(t *testing.T) {
+			home := tempHome(t)
+			if name == "empty access token" {
+				writeTestAuth(t, home, "", "account-1")
+			}
+			var mu sync.Mutex
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				guardConsume(t, r)
+				mu.Lock()
+				calls++
+				mu.Unlock()
+				http.NotFound(w, r)
+			}))
+			defer server.Close()
+
+			p := newProvider(home, 0)
+			p.now = func() time.Time { return time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC) }
+			p.baseURL = server.URL
+			bal, err := p.Query(context.Background())
+			if err != nil {
+				t.Fatalf("Query: %v", err)
+			}
+			if len(bal.Sections) != 2 {
+				t.Fatalf("Sections = %+v, want local data", bal.Sections)
+			}
+			mu.Lock()
+			if calls != 0 {
+				t.Fatalf("calls = %d, want 0 without auth", calls)
+			}
+			mu.Unlock()
+		})
+	}
+}
+
+func TestLive401FallsBackToLocalAndBacksOff(t *testing.T) {
+	home := tempHome(t)
+	writeTestAuth(t, home, "token-1", "account-1")
+	t0 := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	now := t0
+	var mu sync.Mutex
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guardConsume(t, r)
+		if r.URL.Path != usagePath {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"email":"user@example.com","user_id":"user-123","access_token":"token-1"}`))
+	}))
+	defer server.Close()
+
+	p := newProvider(home, 0)
+	p.now = func() time.Time { return now }
+	p.lastResetAttempt = t0
+	p.baseURL = server.URL
+	bal, err := p.Query(context.Background())
+	if err != nil {
+		t.Fatalf("Query should ignore live failure: %v", err)
+	}
+	if len(bal.Sections) == 0 || bal.Sections[0].UsedPct != 6 {
+		t.Fatalf("Sections = %+v, want local weekly 6%%", bal.Sections)
+	}
+	now = t0.Add(30 * time.Minute)
+	if _, err := p.Query(context.Background()); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	mu.Lock()
+	if calls != 1 {
+		t.Fatalf("calls = %d, want 1 after 401 within one hour", calls)
+	}
+	mu.Unlock()
+}
+
+func TestLiveRequestHeadersAndTokenReload(t *testing.T) {
+	home := t.TempDir()
+	writeTestAuth(t, home, "token-1", "account-1")
+	t0 := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	now := t0
+	var mu sync.Mutex
+	calls := 0
+	authorizations := []string{}
+	accounts := []string{}
+	agents := []string{}
+	usageBody := testdata(t, "wham-usage.json")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guardConsume(t, r)
+		if r.URL.Path != usagePath {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		calls++
+		authorizations = append(authorizations, r.Header.Get("Authorization"))
+		accounts = append(accounts, r.Header.Get("ChatGPT-Account-Id"))
+		agents = append(agents, r.Header.Get("User-Agent"))
+		mu.Unlock()
+		w.Write(usageBody)
+	}))
+	defer server.Close()
+
+	p := newProvider(home, 0)
+	p.now = func() time.Time { return now }
+	p.lastResetAttempt = t0
+	p.baseURL = server.URL
+	if _, err := p.Query(context.Background()); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	now = t0.Add(time.Hour)
+	writeTestAuth(t, home, "token-2", "account-2")
+	if _, err := p.Query(context.Background()); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 2 {
+		t.Fatalf("calls = %d, want 2", calls)
+	}
+	if authorizations[0] != "Bearer token-1" || accounts[0] != "account-1" {
+		t.Fatalf("first headers = %q / %q", authorizations[0], accounts[0])
+	}
+	if authorizations[1] != "Bearer token-2" || accounts[1] != "account-2" {
+		t.Fatalf("second headers = %q / %q", authorizations[1], accounts[1])
+	}
+	if agents[0] != "liquoten" {
+		t.Fatalf("User-Agent = %q", agents[0])
+	}
+}
+
+func TestLiveErrorDoesNotLeakSecrets(t *testing.T) {
+	home := t.TempDir()
+	writeTestAuth(t, home, "super-secret-token", "secret-account")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guardConsume(t, r)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"email":"user@example.com","user_id":"user-123","access_token":"super-secret-token"}`))
+	}))
+	defer server.Close()
+
+	p := newProvider(home, 0)
+	p.baseURL = server.URL
+	var out liveUsageResponse
+	err := p.getJSON(context.Background(), usagePath, &out)
+	if err == nil {
+		t.Fatal("getJSON should fail")
+	}
+	for _, secret := range []string{"super-secret-token", "secret-account", "user@example.com", "user-123"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Fatalf("error leaks %q: %v", secret, err)
+		}
 	}
 }

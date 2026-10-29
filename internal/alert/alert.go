@@ -86,6 +86,8 @@ type Engine struct {
 
 const maxConsecutiveFailures = 3
 
+const resetCreditsAlertWindow = 12 * time.Hour
+
 // New 构造引擎。remaining 是剩余百分比提醒点；cacheDir 用于持久化告警状态；notify 为 nil 时静默（测试用）。
 func New(thresholds map[string]map[string]float64, remaining []float64, cacheDir string, notify Notifier) (*Engine, error) {
 	e := &Engine{
@@ -123,6 +125,12 @@ func (e *Engine) Check(balances []providers.Balance) error {
 		e.failCount[b.Provider] = 0
 
 		for _, sec := range b.Sections {
+			if sec.Name == "reset-credits" {
+				if err := e.checkResetCredits(b.Provider, sec); err != nil && firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
 			if sec.UsedPct < 0 {
 				continue
 			}
@@ -159,6 +167,33 @@ func (e *Engine) fire(title, msg string) error {
 	return e.notify(title, msg)
 }
 
+func (e *Engine) checkResetCredits(provider string, sec providers.Section) error {
+	if sec.Remaining <= 0 || sec.ResetAt.IsZero() {
+		return nil
+	}
+	now := e.now()
+	left := sec.ResetAt.Sub(now)
+	if left <= 0 || left >= resetCreditsAlertWindow {
+		return nil
+	}
+	key := fmt.Sprintf("%s|%s|%d", provider, sec.Name, sec.ResetAt.Unix())
+	if e.alerted[key] {
+		return nil
+	}
+	e.alerted[key] = true
+	msg := fmt.Sprintf("%s 有重置卡将于 %s 过期，可在 Codex 桌面 App 里使用", displayName(provider), e.formatTime(sec.ResetAt))
+	return e.fire("额度提醒", msg)
+}
+
+func (e *Engine) formatTime(t time.Time) string {
+	now := e.now()
+	layout := "1月2日 15:04"
+	if y, m, d := t.Local().Date(); now.Local().Year() == y && now.Local().Month() == m && now.Local().Day() == d {
+		layout = "15:04"
+	}
+	return t.Local().Format(layout)
+}
+
 func (e *Engine) persist() error {
 	data, err := json.Marshal(e.alerted)
 	if err != nil {
@@ -185,12 +220,7 @@ func (e *Engine) levels(provider, section string) []float64 {
 func (e *Engine) message(provider string, sec providers.Section, level float64) string {
 	msg := fmt.Sprintf("%s %s剩余不到 %g%%（已用 %.0f%%）", displayName(provider), sectionName(sec.Name), 100-level, sec.UsedPct)
 	if !sec.ResetAt.IsZero() {
-		now := e.now()
-		layout := "1月2日 15:04"
-		if y, m, d := sec.ResetAt.Local().Date(); now.Local().Year() == y && now.Local().Month() == m && now.Local().Day() == d {
-			layout = "15:04"
-		}
-		msg += "，" + sec.ResetAt.Local().Format(layout) + " 重置"
+		msg += "，" + e.formatTime(sec.ResetAt) + " 重置"
 	}
 	return msg
 }
@@ -219,6 +249,8 @@ func sectionName(name string) string {
 		return "每周额度"
 	case "1-month quota":
 		return "月度额度"
+	case "reset-credits":
+		return "重置卡"
 	}
 	return name + " "
 }
