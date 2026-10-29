@@ -12,6 +12,8 @@ import (
 
 const extrasInterval = 6 * time.Hour
 
+const extrasTimeout = 20 * time.Second
+
 type addonSummaryResponse struct {
 	RemainingCredits  float64 `json:"remainingCredits"`
 	ActiveCount       int     `json:"activeCount"`
@@ -45,7 +47,14 @@ func (p *Provider) refreshExtras(ctx context.Context, now time.Time, monthFull b
 	}
 }
 
+// extrasContext 给附加查询单独计时，不和用量查询共用剩余的超时。
+func extrasContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), extrasTimeout)
+}
+
 func (p *Provider) refreshAddonSummary(ctx context.Context, now time.Time) {
+	ctx, cancel := extrasContext(ctx)
+	defer cancel()
 	raw, err := p.queryAPI(ctx, addonSummaryAPI)
 	if err != nil {
 		p.lastAddonAttempt = now
@@ -64,6 +73,8 @@ func (p *Provider) refreshAddonSummary(ctx context.Context, now time.Time) {
 }
 
 func (p *Provider) refreshSubscription(ctx context.Context, now time.Time) {
+	ctx, cancel := extrasContext(ctx)
+	defer cancel()
 	raw, err := p.queryAPI(ctx, subscriptionAPI)
 	if err != nil {
 		p.lastSubscriptionAttempt = now
@@ -95,15 +106,26 @@ func (p *Provider) appendExtras(bal *providers.Balance, now time.Time) {
 			})
 		}
 	}
-	if p.subscriptionLoaded {
+	if p.subscriptionLoaded && subscriptionActive(p.subscription) {
 		end := epochMs(&p.subscription.EndTime)
+		if !end.After(now) {
+			return
+		}
+		name := "subscription"
+		if p.subscription.AutoRenewFlag {
+			name = "subscription-renewing"
+		}
 		bal.Sections = append(bal.Sections, providers.Section{
-			Name:      "subscription",
+			Name:      name,
 			UsedPct:   -1,
 			Remaining: remainingDays(now, end),
 			ResetAt:   end,
 		})
 	}
+}
+
+func subscriptionActive(s subscriptionInfo) bool {
+	return s.EndTime > 0 && (s.Status == "" || s.Status == "VALID")
 }
 
 func remainingDays(now, end time.Time) float64 {

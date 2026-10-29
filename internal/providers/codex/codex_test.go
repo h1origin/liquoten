@@ -601,3 +601,23 @@ func TestLiveUsageCorrectsResetCreditCount(t *testing.T) {
 		})
 	}
 }
+
+func TestResetCountChangedUsesServerHistory(t *testing.T) {
+	now := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	credits := []resetCredit{
+		{Status: "available", IsSupportedByPlan: true, ExpiresAt: now.Add(time.Hour)},
+	}
+	two, one := 2, 1
+	if !resetCountChanged(nil, 2, credits, now) {
+		t.Fatal("first observation differing from local count should refetch")
+	}
+	if resetCountChanged(&two, 2, credits, now) {
+		t.Fatal("unchanged server count should not refetch even if local count differs")
+	}
+	if !resetCountChanged(&two, 1, credits, now) {
+		t.Fatal("server count change should refetch")
+	}
+	if resetCountChanged(&one, 1, credits, now) {
+		t.Fatal("equal counts should not refetch")
+	}
+}

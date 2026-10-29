@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -202,5 +203,40 @@ func TestRefreshSignalAllowed(t *testing.T) {
 				t.Fatalf("refreshSignalAllowed = %v, want %v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestNextIntervalRetriesFailuresAtBase(t *testing.T) {
+	base := time.Minute
+	long := scheduledTestProvider{interval: 30 * time.Minute}
+	short := scheduledTestProvider{interval: 30 * time.Second}
+	cases := []struct {
+		name   string
+		p      providers.Provider
+		failed bool
+		want   time.Duration
+	}{
+		{"long ok", long, false, 30 * time.Minute},
+		{"long failed", long, true, time.Minute},
+		{"short failed", short, true, 30 * time.Second},
+		{"plain failed", plainTestProvider{}, true, time.Minute},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := nextInterval(c.p, base, c.failed); got != c.want {
+				t.Fatalf("nextInterval = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestDrainSignals(t *testing.T) {
+	ch := make(chan os.Signal, 1)
+	ch <- syscall.SIGUSR1
+	drainSignals(ch)
+	select {
+	case <-ch:
+		t.Fatal("signal channel not drained")
+	default:
 	}
 }

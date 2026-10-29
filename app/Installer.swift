@@ -6,7 +6,6 @@ enum InstallerError: LocalizedError {
     case downloadFailed(String)
     case invalidSHAFile
     case checksumMismatch
-    case cannotUpdate
     case commandFailed(String)
     case appNotFound
     case invalidBundle(String)
@@ -23,8 +22,6 @@ enum InstallerError: LocalizedError {
             return "校验文件无效"
         case .checksumMismatch:
             return "下载的 dmg 校验失败"
-        case .cannotUpdate:
-            return "无法自动更新：请把 liquoten 拖到「应用程序」文件夹后再试，或手动下载新版。"
         case .commandFailed(let message):
             return message
         case .appNotFound:
@@ -58,12 +55,17 @@ enum Installer {
         return token.lowercased()
     }
 
+    // 挂载的 dmg 是只读卷，会被只读和可写检查挡住；外置卷上的正常安装可以自动更新。
     static func canAutoUpdate(appPath: URL) -> Bool {
         let path = appPath.standardizedFileURL.path
-        if path.contains("/Volumes/") || path.contains("AppTranslocation") {
+        if path.contains("AppTranslocation") {
             return false
         }
-        return FileManager.default.isWritableFile(atPath: appPath.deletingLastPathComponent().path)
+        let dir = appPath.deletingLastPathComponent()
+        if let values = try? dir.resourceValues(forKeys: [.volumeIsReadOnlyKey]), values.volumeIsReadOnly == true {
+            return false
+        }
+        return FileManager.default.isWritableFile(atPath: dir.path)
     }
 
     static func validateBundle(info: [String: Any], expectedVersion: String) -> String? {
@@ -83,19 +85,11 @@ enum Installer {
 
     static func installLocalSync(
         dmgURL: URL,
-        shaURL: URL,
+        expectedSHA256 expected: String,
         currentAppURL: URL,
         expectedVersion: String,
         phase: (String) -> Void = { _ in }
     ) throws -> URL {
-        guard canAutoUpdate(appPath: currentAppURL) else { throw InstallerError.cannotUpdate }
-        let shaText: String
-        do {
-            shaText = try String(contentsOf: shaURL, encoding: .utf8)
-        } catch {
-            throw InstallerError.invalidSHAFile
-        }
-        guard let expected = parseSHA256(shaText) else { throw InstallerError.invalidSHAFile }
         let actual = try sha256(file: dmgURL)
         guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
             throw InstallerError.checksumMismatch
@@ -200,13 +194,11 @@ enum Installer {
                 return
             }
             guard let text = try? String(contentsOf: shaFile, encoding: .utf8),
-                  parseSHA256(text) != nil else {
+                  let expectedSHA = parseSHA256(text) else {
                 finish(.failure(InstallerError.invalidSHAFile))
                 return
             }
-            download(url: urls.dmg, to: dmgFile, progress: { value in
-                DispatchQueue.main.async { progress(value) }
-            }) { error in
+            download(url: urls.dmg, to: dmgFile, progress: progress) { error in
                 if let error {
                     finish(.failure(InstallerError.downloadFailed(error.localizedDescription)))
                     return
@@ -216,7 +208,7 @@ enum Installer {
                     do {
                         let installed = try installLocalSync(
                             dmgURL: dmgFile,
-                            shaURL: shaFile,
+                            expectedSHA256: expectedSHA,
                             currentAppURL: currentAppURL,
                             expectedVersion: version,
                             phase: { text in

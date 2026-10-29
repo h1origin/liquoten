@@ -51,6 +51,7 @@ type Provider struct {
 	lastResetAttempt   time.Time
 	resetCredits       []resetCredit
 	resetCreditsLoaded bool
+	serverResetCount   *int
 }
 
 type cached struct {
@@ -268,12 +269,23 @@ func (p *Provider) refreshLiveUsage(ctx context.Context, now time.Time) {
 	p.lastUsageAttempt = now
 	p.liveUsage = usage.rateLimits()
 	p.liveUsageAt = now
-	if usage.ResetCredits.AvailableCount != nil && p.resetCreditsLoaded {
-		count, _ := availableResetCredits(p.resetCredits, now)
-		if *usage.ResetCredits.AvailableCount != count {
+	if c := usage.ResetCredits.AvailableCount; c != nil {
+		if p.resetCreditsLoaded && resetCountChanged(p.serverResetCount, *c, p.resetCredits, now) {
 			p.lastResetAttempt = time.Time{}
 		}
+		v := *c
+		p.serverResetCount = &v
 	}
+}
+
+// resetCountChanged 只在服务端张数相对上次观察发生变化时才要求重查明细；
+// 首次观察时才和本地统计比较，避免两边统计口径不同导致每次都重查。
+func resetCountChanged(prev *int, server int, credits []resetCredit, now time.Time) bool {
+	if prev != nil {
+		return *prev != server
+	}
+	local, _ := availableResetCredits(credits, now)
+	return local != server
 }
 
 func (p *Provider) refreshResetCredits(ctx context.Context, now time.Time) {

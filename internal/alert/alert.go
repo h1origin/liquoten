@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -166,10 +167,30 @@ func (e *Engine) Check(balances []providers.Balance) error {
 		}
 	}
 
+	e.pruneExpired()
 	if err := e.persist(); err != nil && firstErr == nil {
 		firstErr = err
 	}
 	return firstErr
+}
+
+// expiryKinds 是按到期时间去重的提醒，键的最后一段是到期时间的 Unix 秒。
+var expiryKinds = map[string]bool{"reset-credits": true, "addon-credits-expire": true, "subscription": true}
+
+const expiredKeyRetention = 7 * 24 * time.Hour
+
+// pruneExpired 删掉到期已超过一周的到期类提醒记录，避免状态文件无限增长。
+func (e *Engine) pruneExpired() {
+	cutoff := e.now().Add(-expiredKeyRetention).Unix()
+	for key := range e.alerted {
+		parts := strings.Split(key, "|")
+		if len(parts) != 3 || !expiryKinds[parts[1]] {
+			continue
+		}
+		if ts, err := strconv.ParseInt(parts[2], 10, 64); err == nil && ts < cutoff {
+			delete(e.alerted, key)
+		}
+	}
 }
 
 func (e *Engine) fire(title, msg string) error {

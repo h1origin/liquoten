@@ -507,7 +507,7 @@ struct ProviderHeader: View {
 
     private func chipText(_ section: SectionState) -> String {
         let value = section.remaining.formatted(.number.precision(.fractionLength(0...2)))
-        if section.name == "subscription" {
+        if section.name.hasPrefix("subscription") {
             return "\(AppDelegate.sectionTitle(section.name)) \(value) 天"
         }
         return "\(AppDelegate.sectionTitle(section.name)) \(value)"

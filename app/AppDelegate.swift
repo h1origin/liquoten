@@ -195,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         case "1-month quota": return "月度额度"
         case "reset-credits": return "重置卡"
         case "addon-credits": return "额度补充"
-        case "subscription": return "套餐剩余"
+        case "subscription", "subscription-renewing": return "套餐剩余"
         case "credits": return "Credits 余额"
         default: return name
         }

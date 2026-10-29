@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -403,3 +404,55 @@ func TestFileNotifierThroughEngine(t *testing.T) {
 		t.Fatalf("事件内容不符: %s", data)
 	}
 }
+
+func TestRenewingSubscriptionNotAlerted(t *testing.T) {
+	r := &recorder{}
+	now := time.Date(2026, 11, 14, 9, 0, 0, 0, time.Local)
+	e, err := New(nil, nil, t.TempDir(), r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.now = func() time.Time { return now }
+	bal := providers.Balance{Provider: "bailian", Sections: []providers.Section{
+		{Name: "subscription-renewing", UsedPct: -1, Remaining: 1, ResetAt: now.Add(24 * time.Hour)},
+	}}
+	if err := e.Check([]providers.Balance{bal}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 0 {
+		t.Fatalf("fired = %v, want none for auto-renewing subscription", r.fired)
+	}
+}
+
+func TestPruneExpiredAlertKeys(t *testing.T) {
+	now := time.Date(2026, 11, 14, 9, 0, 0, 0, time.Local)
+	e, err := New(nil, nil, t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.now = func() time.Time { return now }
+	old := now.Add(-8 * 24 * time.Hour).Unix()
+	recent := now.Add(-time.Hour).Unix()
+	e.alerted = map[string]bool{
+		"codex|reset-credits|" + itoa(old):          true,
+		"bailian|addon-credits-expire|" + itoa(old): true,
+		"bailian|subscription|" + itoa(recent):      true,
+		"codex|1-week quota|80":                     true,
+		"bailian|addon-credits|50":                  true,
+	}
+	if err := e.Check(nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"codex|reset-credits|" + itoa(old), "bailian|addon-credits-expire|" + itoa(old)} {
+		if _, ok := e.alerted[k]; ok {
+			t.Fatalf("stale key %q not pruned", k)
+		}
+	}
+	for _, k := range []string{"bailian|subscription|" + itoa(recent), "codex|1-week quota|80", "bailian|addon-credits|50"} {
+		if _, ok := e.alerted[k]; !ok {
+			t.Fatalf("key %q should be kept", k)
+		}
+	}
+}
+
+func itoa(v int64) string { return strconv.FormatInt(v, 10) }

@@ -46,6 +46,10 @@ func main() {
 		return
 	}
 
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGUSR1)
+	defer signal.Stop(sigCh)
+
 	configPath := flag.String("config", config.DefaultPath(), "配置文件路径（默认 ~/.config/liquoten/config.toml）")
 	once := flag.Bool("once", false, "只轮询一次后退出（调试用）")
 	cacheDir := flag.String("cache-dir", store.DefaultDir(), "缓存目录（默认 ~/.cache/liquoten）")
@@ -96,8 +100,8 @@ func main() {
 	log.Printf("liquoten 启动：providers=[%s] 轮询间隔=%s 缓存目录=%s", strings.Join(names, ","), interval(cfg), *cacheDir)
 
 	base := interval(cfg)
-	every := func(p providers.Provider) time.Duration {
-		return everyInterval(p, base)
+	every := func(p providers.Provider, failed bool) time.Duration {
+		return nextInterval(p, base, failed)
 	}
 	latest := map[string]providers.Balance{}
 	due := map[string]time.Time{}
@@ -137,7 +141,7 @@ func main() {
 			}
 			latest[p.Name()] = bal
 			polled = append(polled, bal)
-			d := every(p)
+			d := every(p, bal.Err != "")
 			due[p.Name()] = now.Add(d + time.Duration(rand.Float64()*0.2*float64(d)-0.1*float64(d)))
 		}
 		if len(polled) == 0 {
@@ -160,15 +164,12 @@ func main() {
 		}
 	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGUSR1)
-	defer signal.Stop(sigCh)
-	var lastSignalPoll time.Time
-
 	poll(time.Now())
 	if *once {
 		return
 	}
+	lastSignalPoll := time.Now()
+	drainSignals(sigCh)
 
 	for {
 		next := time.Time{}
@@ -193,10 +194,11 @@ func main() {
 				log.Printf("忽略 10 秒内的重复刷新信号")
 				continue
 			}
-			lastSignalPoll = now
 			log.Printf("收到 SIGUSR1，立即刷新")
 			handleRefreshSignal(provs, due, now)
 			poll(now)
+			lastSignalPoll = time.Now()
+			drainSignals(sigCh)
 		}
 	}
 }
@@ -401,6 +403,25 @@ func everyInterval(p providers.Provider, base time.Duration) time.Duration {
 		return sp.PollInterval()
 	}
 	return base
+}
+
+// nextInterval 查询失败时不等 provider 的长间隔，最多按全局间隔重试。
+func nextInterval(p providers.Provider, base time.Duration, failed bool) time.Duration {
+	d := everyInterval(p, base)
+	if failed && d > base {
+		return base
+	}
+	return d
+}
+
+func drainSignals(ch <-chan os.Signal) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
 }
 
 const refreshSignalDebounce = 10 * time.Second

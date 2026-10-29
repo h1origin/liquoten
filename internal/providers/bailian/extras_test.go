@@ -420,3 +420,51 @@ func TestRefreshNowClearsExtrasAttempts(t *testing.T) {
 	}
 	var _ providers.Refresher = p
 }
+
+func TestSubscriptionSectionValidity(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	end := now.Add(5 * 24 * time.Hour).UnixMilli()
+	cases := []struct {
+		name string
+		sub  subscriptionInfo
+		want string
+	}{
+		{"valid", subscriptionInfo{EndTime: end, Status: "VALID"}, "subscription"},
+		{"auto renew", subscriptionInfo{EndTime: end, Status: "VALID", AutoRenewFlag: true}, "subscription-renewing"},
+		{"missing end", subscriptionInfo{Status: "VALID"}, ""},
+		{"not valid", subscriptionInfo{EndTime: end, Status: "EXPIRED"}, ""},
+		{"already ended", subscriptionInfo{EndTime: now.Add(-time.Hour).UnixMilli(), Status: "VALID"}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := New(providers.Options{})
+			p.subscription = c.sub
+			p.subscriptionLoaded = true
+			var bal providers.Balance
+			p.appendExtras(&bal, now)
+			got := ""
+			for _, s := range bal.Sections {
+				if strings.HasPrefix(s.Name, "subscription") {
+					got = s.Name
+				}
+			}
+			if got != c.want {
+				t.Fatalf("section = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestExtrasUseOwnTimeout(t *testing.T) {
+	parent, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	time.Sleep(5 * time.Millisecond)
+	ctx, done := extrasContext(parent)
+	defer done()
+	if ctx.Err() != nil {
+		t.Fatalf("extras context inherited expired deadline: %v", ctx.Err())
+	}
+	if dl, ok := ctx.Deadline(); !ok || time.Until(dl) > extrasTimeout {
+		t.Fatalf("deadline = %v, %v", dl, ok)
+	}
+}
