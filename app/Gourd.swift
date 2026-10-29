@@ -116,9 +116,19 @@ enum Gourd {
 
     private static func highlightPath(origin: NSPoint, scale: CGFloat) -> NSBezierPath {
         let p = { (x: CGFloat, y: CGFloat) in point(x, y, origin: origin, scale: scale) }
+        let start = p(-19, 32)
+        let end = p(-8, 45)
+        let radius = 21 * scale
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let d = hypot(dx, dy)
+        let mid = NSPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+        let h = sqrt(max(0, radius * radius - d * d / 4))
+        let center = NSPoint(x: mid.x - dy / d * h, y: mid.y + dx / d * h)
+        let startAngle = atan2(start.y - center.y, start.x - center.x) * 180 / .pi
+        let endAngle = atan2(end.y - center.y, end.x - center.x) * 180 / .pi
         let path = NSBezierPath()
-        path.move(to: p(-19, 32))
-        path.curve(to: p(-8, 45), controlPoint1: p(-22, 38), controlPoint2: p(-16, 44))
+        path.appendArc(withCenter: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: false)
         return path
     }
 
@@ -237,7 +247,7 @@ enum Gourd {
             NSColor.white.withAlphaComponent(0.6).setStroke()
             highlight.stroke()
 
-            NSColor(srgbRed: 201 / 255, green: 164 / 255, blue: 106 / 255, alpha: 1).setFill()
+            NSColor.white.withAlphaComponent(0.92).setFill()
             stemPath(origin: origin, scale: scale).fill()
             NSColor(srgbRed: 76 / 255, green: 175 / 255, blue: 122 / 255, alpha: 1).setFill()
             leafPath(origin: origin, scale: scale).fill()
