@@ -40,24 +40,24 @@ const resetCreditsInterval = 6 * time.Hour
 var errNoAuth = errors.New("没有 Codex 登录凭据")
 
 type Provider struct {
-	home                string
-	now                 func() time.Time
-	cache               map[string]cached
-	timeout             time.Duration
-	baseURL             string
-	lastUsageAttempt    time.Time
-	liveUsage           *rateLimits
-	liveUsageAt         time.Time
-	lastResetAttempt    time.Time
-	resetCredits        []resetCredit
-	resetCreditsLoaded  bool
-	serverResetCount    *int
-	feedURL             string
-	lastOfficialAttempt time.Time
-	officialRetryAt     time.Time
-	officialTimeout     time.Duration
-	official            officialLatest
-	officialLoaded      bool
+	home               string
+	now                func() time.Time
+	cache              map[string]cached
+	timeout            time.Duration
+	baseURL            string
+	lastUsageAttempt   time.Time
+	liveUsage          *rateLimits
+	liveUsageAt        time.Time
+	lastResetAttempt   time.Time
+	resetCredits       []resetCredit
+	resetCreditsLoaded bool
+	serverResetCount   *int
+	feedURL            string
+	lastTiboAttempt    time.Time
+	tiboRetryAt        time.Time
+	tiboTimeout        time.Duration
+	tibo               time.Time
+	tiboLoaded         bool
 }
 
 type cached struct {
@@ -109,7 +109,7 @@ type resetCredit struct {
 func init() {
 	providers.Register(Name, func(opts providers.Options) (providers.Provider, error) {
 		p := newProvider(DefaultHome(), opts.Timeout)
-		p.feedURL = officialFeedURL
+		p.feedURL = tiboFeedURL
 		return p, nil
 	})
 }
@@ -134,12 +134,12 @@ func newProvider(home string, timeout time.Duration) *Provider {
 		timeout = defaultTimeout
 	}
 	return &Provider{
-		home:            home,
-		now:             time.Now,
-		cache:           map[string]cached{},
-		timeout:         timeout,
-		baseURL:         defaultBaseURL,
-		officialTimeout: officialTimeout,
+		home:        home,
+		now:         time.Now,
+		cache:       map[string]cached{},
+		timeout:     timeout,
+		baseURL:     defaultBaseURL,
+		tiboTimeout: tiboTimeout,
 	}
 }
 
@@ -148,8 +148,8 @@ func (p *Provider) Name() string { return Name }
 func (p *Provider) RefreshNow() {
 	p.lastUsageAttempt = time.Time{}
 	p.lastResetAttempt = time.Time{}
-	p.lastOfficialAttempt = time.Time{}
-	p.officialRetryAt = time.Time{}
+	p.lastTiboAttempt = time.Time{}
+	p.tiboRetryAt = time.Time{}
 }
 
 func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
@@ -162,7 +162,7 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 	}
 	p.refreshLiveUsage(ctx, now)
 	p.refreshResetCredits(ctx, now)
-	p.refreshOfficial(ctx, now)
+	p.refreshTibo(ctx, now)
 
 	var rl *rateLimits
 	var ts time.Time
@@ -193,7 +193,7 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 			ResetAt:   earliest,
 		})
 	}
-	bal.Sections = append(bal.Sections, p.officialSections()...)
+	bal.Sections = append(bal.Sections, p.tiboSections()...)
 	return bal, nil
 }
 

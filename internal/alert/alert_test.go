@@ -457,7 +457,7 @@ func TestPruneExpiredAlertKeys(t *testing.T) {
 
 func itoa(v int64) string { return strconv.FormatInt(v, 10) }
 
-func TestOfficialResetAlert(t *testing.T) {
+func TestTiboResetAlert(t *testing.T) {
 	dir := t.TempDir()
 	r := &recorder{}
 	now := time.Date(2026, 10, 28, 15, 0, 0, 0, time.Local)
@@ -466,29 +466,28 @@ func TestOfficialResetAlert(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.now = func() time.Time { return now }
-	bal := func(name string, at time.Time) providers.Balance {
+	bal := func(at time.Time) providers.Balance {
 		return providers.Balance{
 			Provider:  "codex",
 			FetchedAt: now,
-			Sections:  []providers.Section{{Name: name, UsedPct: -1, Remaining: -1, ResetAt: at}},
+			Sections:  []providers.Section{{Name: "tibo-reset", UsedPct: -1, Remaining: -1, ResetAt: at}},
 		}
 	}
 
-	old := now.Add(-25 * time.Hour)
-	if err := e.Check([]providers.Balance{bal("official-reset", old)}); err != nil {
+	if err := e.Check([]providers.Balance{bal(now.Add(-25 * time.Hour))}); err != nil {
 		t.Fatal(err)
 	}
 	if len(r.fired) != 0 {
-		t.Fatalf("fired = %v, want none for announcements older than 24h", r.fired)
+		t.Fatalf("fired = %v, want none for posts older than 24h", r.fired)
 	}
 
 	recent := time.Date(2026, 10, 28, 10, 42, 0, 0, time.Local)
 	for range 2 {
-		if err := e.Check([]providers.Balance{bal("official-reset", recent)}); err != nil {
+		if err := e.Check([]providers.Balance{bal(recent)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(r.fired) != 1 || r.fired[0] != "额度提醒: Codex 官方于 10:42 宣布重置额度" {
+	if len(r.fired) != 1 || r.fired[0] != "潜在的额度重置: Tibo 于 10:42 发推暗示 Codex 额度重置" {
 		t.Fatalf("fired = %v", r.fired)
 	}
 
@@ -497,18 +496,69 @@ func TestOfficialResetAlert(t *testing.T) {
 		t.Fatal(err)
 	}
 	e2.now = func() time.Time { return now }
-	if err := e2.Check([]providers.Balance{bal("official-reset", recent)}); err != nil {
+	if err := e2.Check([]providers.Balance{bal(recent)}); err != nil {
 		t.Fatal(err)
 	}
 	if len(r.fired) != 1 {
 		t.Fatalf("fired = %v, want no repeat after restart", r.fired)
 	}
+}
 
-	card := time.Date(2026, 10, 28, 12, 0, 0, 0, time.Local)
-	if err := e2.Check([]providers.Balance{bal("official-reset-card", card)}); err != nil {
-		t.Fatal(err)
+func TestResetCreditArrivalAlert(t *testing.T) {
+	dir := t.TempDir()
+	r := &recorder{}
+	now := time.Date(2026, 10, 28, 15, 0, 0, 0, time.Local)
+	newEngine := func() *Engine {
+		e, err := New(nil, nil, dir, r.notify)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.now = func() time.Time { return now }
+		return e
 	}
-	if len(r.fired) != 2 || r.fired[1] != "额度提醒: Codex 官方于 12:00 宣布发放重置卡" {
+	check := func(e *Engine, count float64) {
+		t.Helper()
+		bal := providers.Balance{
+			Provider:  "codex",
+			FetchedAt: now,
+			Sections:  []providers.Section{{Name: "reset-credits", UsedPct: -1, Remaining: count, ResetAt: now.Add(30 * 24 * time.Hour)}},
+		}
+		if err := e.Check([]providers.Balance{bal}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	e := newEngine()
+	check(e, 1)
+	if len(r.fired) != 0 {
+		t.Fatalf("fired = %v, want none on first observation", r.fired)
+	}
+	check(e, 2)
+	if len(r.fired) != 1 || r.fired[0] != "额度提醒: 新的 Codex 额度重置卡已到账，现有 2 张" {
 		t.Fatalf("fired = %v", r.fired)
+	}
+	check(e, 2)
+	check(e, 1)
+	if len(r.fired) != 1 {
+		t.Fatalf("fired = %v, want no alert when a card is used", r.fired)
+	}
+
+	e2 := newEngine()
+	check(e2, 1)
+	if len(r.fired) != 1 {
+		t.Fatalf("fired = %v, want no alert after restart with same count", r.fired)
+	}
+	check(e2, 2)
+	if len(r.fired) != 2 {
+		t.Fatalf("fired = %v, want arrival after restart", r.fired)
+	}
+	keys := 0
+	for k := range e2.alerted {
+		if strings.HasPrefix(k, "codex|reset-credits-count|") {
+			keys++
+		}
+	}
+	if keys != 1 {
+		t.Fatalf("count keys = %d, want 1", keys)
 	}
 }

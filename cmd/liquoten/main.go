@@ -453,7 +453,7 @@ func logBalance(bal providers.Balance) {
 	}
 	parts := make([]string, 0, len(bal.Sections))
 	for _, s := range bal.Sections {
-		if strings.HasPrefix(s.Name, "official-") {
+		if s.Name == "tibo-reset" {
 			parts = append(parts, fmt.Sprintf("%s=%s", s.Name, s.ResetAt.Local().Format("01-02 15:04")))
 			continue
 		}

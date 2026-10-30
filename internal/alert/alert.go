@@ -2,7 +2,8 @@
 //   - 每项额度剩余降到各提醒点（默认剩余 50%、20%）时各发一次通知，回升（新周期）后复位
 //   - [thresholds] 里按已用百分比配置的阈值作为额外提醒点
 //   - 查询连续失败 3 次告警一次，成功即复位
-//   - Codex 官方宣布重置或发放重置卡时通知一次（只通知 24 小时内的新公告）
+//   - Tibo 发推暗示 Codex 额度重置时通知一次（只通知 24 小时内的新推文）
+//   - Codex 重置卡张数增加时通知到账
 //   - 已告警状态落盘，daemon 重启后不会立即重复轰炸
 //   - 通知默认写入 notifications.jsonl，由 liquoten.app 投递系统通知
 package alert
@@ -92,7 +93,7 @@ const resetCreditsAlertWindow = 12 * time.Hour
 
 const expiryAlertWindow = 3 * 24 * time.Hour
 
-const officialAlertWindow = 24 * time.Hour
+const tiboAlertWindow = 24 * time.Hour
 
 // New 构造引擎。remaining 是剩余百分比提醒点；cacheDir 用于持久化告警状态；notify 为 nil 时静默（测试用）。
 func New(thresholds map[string]map[string]float64, remaining []float64, cacheDir string, notify Notifier) (*Engine, error) {
@@ -133,6 +134,9 @@ func (e *Engine) Check(balances []providers.Balance) error {
 		for _, sec := range b.Sections {
 			switch sec.Name {
 			case "reset-credits":
+				if err := e.checkResetCreditArrival(b.Provider, sec); err != nil && firstErr == nil {
+					firstErr = err
+				}
 				if err := e.checkResetCredits(b.Provider, sec); err != nil && firstErr == nil {
 					firstErr = err
 				}
@@ -142,8 +146,8 @@ func (e *Engine) Check(balances []providers.Balance) error {
 					firstErr = err
 				}
 				continue
-			case "official-reset", "official-reset-card":
-				if err := e.checkOfficial(b.Provider, sec); err != nil && firstErr == nil {
+			case "tibo-reset":
+				if err := e.checkTibo(b.Provider, sec); err != nil && firstErr == nil {
 					firstErr = err
 				}
 				continue
@@ -183,7 +187,7 @@ func (e *Engine) Check(balances []providers.Balance) error {
 }
 
 // expiryKinds 是按到期时间去重的提醒，键的最后一段是到期时间的 Unix 秒。
-var expiryKinds = map[string]bool{"reset-credits": true, "addon-credits-expire": true, "subscription": true, "official-reset": true, "official-reset-card": true}
+var expiryKinds = map[string]bool{"reset-credits": true, "addon-credits-expire": true, "subscription": true, "tibo-reset": true}
 
 const expiredKeyRetention = 7 * 24 * time.Hour
 
@@ -226,12 +230,12 @@ func (e *Engine) checkResetCredits(provider string, sec providers.Section) error
 	return e.fire("额度提醒", msg)
 }
 
-func (e *Engine) checkOfficial(provider string, sec providers.Section) error {
+func (e *Engine) checkTibo(provider string, sec providers.Section) error {
 	if sec.ResetAt.IsZero() {
 		return nil
 	}
 	age := e.now().Sub(sec.ResetAt)
-	if age < 0 || age >= officialAlertWindow {
+	if age < 0 || age >= tiboAlertWindow {
 		return nil
 	}
 	key := fmt.Sprintf("%s|%s|%d", provider, sec.Name, sec.ResetAt.Unix())
@@ -239,11 +243,32 @@ func (e *Engine) checkOfficial(provider string, sec providers.Section) error {
 		return nil
 	}
 	e.alerted[key] = true
-	msg := fmt.Sprintf("%s 官方于 %s 宣布重置额度", displayName(provider), e.formatTime(sec.ResetAt))
-	if sec.Name == "official-reset-card" {
-		msg = fmt.Sprintf("%s 官方于 %s 宣布发放重置卡", displayName(provider), e.formatTime(sec.ResetAt))
+	msg := fmt.Sprintf("Tibo 于 %s 发推暗示 %s 额度重置", e.formatTime(sec.ResetAt), displayName(provider))
+	return e.fire("潜在的额度重置", msg)
+}
+
+func (e *Engine) checkResetCreditArrival(provider string, sec providers.Section) error {
+	prefix := provider + "|reset-credits-count|"
+	prev, prevKey := -1, ""
+	for key := range e.alerted {
+		if n, ok := strings.CutPrefix(key, prefix); ok {
+			if v, err := strconv.Atoi(n); err == nil {
+				prev, prevKey = v, key
+			}
+		}
 	}
-	return e.fire("额度提醒", msg)
+	cur := int(sec.Remaining)
+	if cur < 0 || cur == prev {
+		return nil
+	}
+	if prevKey != "" {
+		delete(e.alerted, prevKey)
+	}
+	e.alerted[prefix+strconv.Itoa(cur)] = true
+	if prevKey == "" || cur <= prev {
+		return nil
+	}
+	return e.fire("额度提醒", fmt.Sprintf("新的 %s 额度重置卡已到账，现有 %d 张", displayName(provider), cur))
 }
 
 func (e *Engine) checkAddonCredits(provider string, sec providers.Section) error {

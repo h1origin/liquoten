@@ -25,7 +25,7 @@ liquoten shows how much of each LLM plan you have used as a water droplet in the
 - **Everything in one place**: Claude Code, ChatGPT Codex, Alibaba Cloud Bailian (Model Studio) Token Plan and Qoder all appear in one panel.
 - **At-a-glance menu bar**: the droplet's water level and color (blue → orange → red) follow your tightest quota, with the remaining percentage shown next to it.
 - **Trends**: each quota card has a usage chart (per-minute for 5-hour windows, per-day for weekly and monthly windows) and a reset countdown.
-- **Notifications**: you get a macOS notification when a quota drops below 50% and 20% remaining (configurable), when a provider keeps failing, when a Codex reset credit is about to expire, and when the Codex team announces a reset.
+- **Notifications**: you get a macOS notification when a quota drops below 50% and 20% remaining (configurable), when a provider keeps failing, when a Codex reset credit is about to expire, when Tibo posts about a Codex reset, and when a new reset credit arrives.
 - **In-app updates**: downloads the release dmg, checks its SHA-256, replaces the app and relaunches itself. Browser-downloaded first installs still need the one-time Gatekeeper approval.
 - **Private and lightweight**: data stays on your Mac. Credentials are only read locally or kept in a `0600` config file. Uses about 0% CPU, and the only third-party dependency is a TOML parser.
 - **Native**: a SwiftUI menu bar app, Universal binary (Apple silicon + Intel), with a launch-at-login switch.
@@ -91,7 +91,8 @@ Claude Code's status bar then shows something like `[Opus] 5h 23% · 周 41%`, a
 No setup needed. liquoten reads the latest usage from `~/.codex/sessions`.
 - **30-minute correction**: if you are signed in to Codex with ChatGPT, liquoten also calls the read-only usage endpoint every 30 minutes, so numbers stay current when you have not used the CLI for a while.
 - **Reset credits**: checked every 6 hours. You get a notification when one will expire within 12 hours.
-- **Official resets**: every 15 minutes liquoten reads the public archive at [willcodexresets.com](https://willcodexresets.com/api/docs), which tracks reset announcements by the Codex team on X. It waits at most 5 seconds, retries once after a minute on failure, then skips until the next round. When a new reset or reset-credit grant is announced you get a notification, and the Codex card shows the latest official reset. No account data is sent.
+- **Tibo's reset posts**: every 15 minutes liquoten reads the public archive at [willcodexresets.com](https://willcodexresets.com/api/docs), which tracks posts on X by Tibo (@thsottiaux, a Codex team member) that hint at a usage reset. It waits at most 5 seconds, retries once after a minute on failure, then skips until the next round. A new post triggers a "possible reset" notification, and the Codex card shows when Tibo last mentioned a reset. These are one person's posts, not an official OpenAI notice. No account data is sent.
+- **Reset credit arrival**: when the number of reset credits in your account goes up, you get a notification that a new one has arrived.
 - **Login**: liquoten only reads `~/.codex/auth.json`. It never refreshes tokens itself and never redeems reset credits.
 
 ### Alibaba Cloud Bailian
