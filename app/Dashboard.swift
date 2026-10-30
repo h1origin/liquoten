@@ -65,14 +65,6 @@ final class DashboardModel: ObservableObject {
         balances.first { $0.provider == provider }
     }
 
-    var okSections: [SectionState] {
-        balances.filter { $0.error?.isEmpty ?? true }.flatMap(\.sections).filter { $0.usedPct >= 0 }
-    }
-
-    var lowestAvailable: Double? {
-        okSections.map(\.availablePct).min()
-    }
-
     var errorCount: Int {
         balances.filter { !($0.error?.isEmpty ?? true) }.count
     }
@@ -185,15 +177,6 @@ enum Style {
         case ...10: return .red
         case ...30: return .orange
         default: return .blue
-        }
-    }
-
-    static func status(available: Double?) -> String {
-        guard let available else { return "暂无数据" }
-        switch available {
-        case ...10: return "紧张"
-        case ...30: return "注意"
-        default: return "充足"
         }
     }
 
@@ -341,46 +324,28 @@ struct HeaderView: View {
     @ObservedObject var model: DashboardModel
 
     var body: some View {
-        let lowest = model.lowestAvailable
-        let tint = lowest.map { Style.color(available: $0) } ?? .secondary
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("所有额度中最低剩余").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button(action: model.onRefresh) {
-                    HStack(spacing: 4) {
-                        if model.refreshing {
-                            ProgressView().controlSize(.mini)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        Text("刷新")
+        HStack(spacing: 6) {
+            Chip(text: "\(model.balances.count) 个服务")
+            if let t = model.lastUpdated {
+                Chip(text: "更新于 " + t.formatted(date: .omitted, time: .shortened))
+            }
+            if model.errorCount > 0 {
+                Chip(text: "\(model.errorCount) 个出错", tint: .red)
+            }
+            Spacer()
+            Button(action: model.onRefresh) {
+                HStack(spacing: 4) {
+                    if model.refreshing {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
                     }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(model.refreshing)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "gauge.with.dots.needle.33percent")
-                    .font(.title2)
-                    .foregroundStyle(tint)
-                Text(lowest.map { "\(Int($0.rounded()))" } ?? "--")
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
-                if lowest != nil {
-                    Text("%").font(.title3).foregroundStyle(.secondary)
-                }
-                Text(Style.status(available: lowest)).font(.title3.weight(.medium)).foregroundStyle(tint)
-            }
-            HStack(spacing: 6) {
-                Chip(text: "\(model.balances.count) 个服务")
-                if let t = model.lastUpdated {
-                    Chip(text: "更新于 " + t.formatted(date: .omitted, time: .shortened))
-                }
-                if model.errorCount > 0 {
-                    Chip(text: "\(model.errorCount) 个出错", tint: .red)
+                    Text("刷新")
                 }
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(model.refreshing)
         }
     }
 }
