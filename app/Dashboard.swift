@@ -330,15 +330,18 @@ struct HeaderView: View {
                 Text("所有额度中最高已用").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button(action: model.onRefresh) {
-                    if model.refreshing {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
+                    HStack(spacing: 4) {
+                        if model.refreshing {
+                            ProgressView().controlSize(.mini)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Text("刷新")
                     }
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .disabled(model.refreshing)
-                .help("刷新")
             }
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "gauge.with.dots.needle.33percent")
