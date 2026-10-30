@@ -487,7 +487,7 @@ func TestTiboResetAlert(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(r.fired) != 1 || r.fired[0] != "潜在的额度重置: Tibo 于 10:42 发推暗示 Codex 额度重置" {
+	if len(r.fired) != 1 || r.fired[0] != "潜在的 Codex 额度重置: Tibo 于 10:42 发推暗示 Codex 额度重置" {
 		t.Fatalf("fired = %v", r.fired)
 	}
 
@@ -521,7 +521,7 @@ func TestResetCreditArrivalAlert(t *testing.T) {
 		bal := providers.Balance{
 			Provider:  "codex",
 			FetchedAt: now,
-			Sections:  []providers.Section{{Name: "reset-credits", UsedPct: -1, Remaining: count, ResetAt: now.Add(30 * 24 * time.Hour)}},
+			Sections:  []providers.Section{{Name: "reset-credits", UsedPct: -1, Remaining: count, ResetAt: time.Date(2026, 11, 4, 16, 39, 0, 0, time.Local)}},
 		}
 		if err := e.Check([]providers.Balance{bal}); err != nil {
 			t.Fatal(err)
@@ -534,7 +534,7 @@ func TestResetCreditArrivalAlert(t *testing.T) {
 		t.Fatalf("fired = %v, want none on first observation", r.fired)
 	}
 	check(e, 2)
-	if len(r.fired) != 1 || r.fired[0] != "额度提醒: 新的 Codex 额度重置卡已到账，现有 2 张" {
+	if len(r.fired) != 1 || r.fired[0] != "额度提醒: 新到账 1 张 Codex 额度重置卡，现有 2 张，最近一张将于 11月4日 16:39 过期" {
 		t.Fatalf("fired = %v", r.fired)
 	}
 	check(e, 2)

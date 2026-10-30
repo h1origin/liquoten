@@ -244,7 +244,7 @@ func (e *Engine) checkTibo(provider string, sec providers.Section) error {
 	}
 	e.alerted[key] = true
 	msg := fmt.Sprintf("Tibo 于 %s 发推暗示 %s 额度重置", e.formatTime(sec.ResetAt), displayName(provider))
-	return e.fire("潜在的额度重置", msg)
+	return e.fire(fmt.Sprintf("潜在的 %s 额度重置", displayName(provider)), msg)
 }
 
 func (e *Engine) checkResetCreditArrival(provider string, sec providers.Section) error {
@@ -268,7 +268,11 @@ func (e *Engine) checkResetCreditArrival(provider string, sec providers.Section)
 	if prevKey == "" || cur <= prev {
 		return nil
 	}
-	return e.fire("额度提醒", fmt.Sprintf("新的 %s 额度重置卡已到账，现有 %d 张", displayName(provider), cur))
+	msg := fmt.Sprintf("新到账 %d 张 %s 额度重置卡，现有 %d 张", cur-prev, displayName(provider), cur)
+	if !sec.ResetAt.IsZero() {
+		msg += "，最近一张将于 " + e.formatTime(sec.ResetAt) + " 过期"
+	}
+	return e.fire("额度提醒", msg)
 }
 
 func (e *Engine) checkAddonCredits(provider string, sec providers.Section) error {
