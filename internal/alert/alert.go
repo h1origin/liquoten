@@ -272,7 +272,7 @@ func (e *Engine) checkResetCreditArrival(provider string, sec providers.Section)
 	if !sec.ResetAt.IsZero() {
 		msg += "，最近一张将于 " + e.formatTime(sec.ResetAt) + " 过期"
 	}
-	return e.fire("额度提醒", msg)
+	return e.fire(fmt.Sprintf("新的 %s 重置卡", displayName(provider)), msg)
 }
 
 func (e *Engine) checkAddonCredits(provider string, sec providers.Section) error {

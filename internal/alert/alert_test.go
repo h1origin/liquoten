@@ -534,7 +534,7 @@ func TestResetCreditArrivalAlert(t *testing.T) {
 		t.Fatalf("fired = %v, want none on first observation", r.fired)
 	}
 	check(e, 2)
-	if len(r.fired) != 1 || r.fired[0] != "额度提醒: 新到账 1 张 Codex 额度重置卡，现有 2 张，最近一张将于 11月4日 16:39 过期" {
+	if len(r.fired) != 1 || r.fired[0] != "新的 Codex 重置卡: 新到账 1 张 Codex 额度重置卡，现有 2 张，最近一张将于 11月4日 16:39 过期" {
 		t.Fatalf("fired = %v", r.fired)
 	}
 	check(e, 2)
