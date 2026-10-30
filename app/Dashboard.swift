@@ -143,17 +143,30 @@ struct DashboardView: View {
             } else {
                 let balances = b.sections.filter { $0.usedPct < 0 && $0.remaining >= 0 }
                 let quotas = b.sections.filter { !($0.usedPct < 0 && $0.remaining >= 0) }
-                ProviderHeader(provider: b.provider, extras: balances)
+                ProviderHeader(provider: b.provider,
+                               resets: quotas.filter { $0.name != "addon-credits" && ($0.resetAt ?? .distantPast) > model.now },
+                               now: model.now)
+                if quotas.isEmpty && !balances.isEmpty {
+                    Card {
+                        Text(balances.map(Style.extraText).joined(separator: " · "))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 let rows = stride(from: 0, to: quotas.count, by: 2).map { start in
                     Array(quotas[start..<min(start + 2, quotas.count)])
                 }
                 Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 10) {
                     ForEach(rows.indices, id: \.self) { index in
+                        let footers = rows[index].map { s in
+                            SectionCard.footer(s, extras: s.name == quotas.first?.name ? balances : [], now: model.now)
+                        }
                         GridRow(alignment: .top) {
-                            ForEach(rows[index], id: \.name) { s in
+                            ForEach(Array(rows[index].enumerated()), id: \.element.name) { i, s in
                                 SectionCard(provider: b.provider, section: s,
                                             points: model.history[HistoryReader.key(b.provider, s.name)] ?? [],
-                                            now: model.now)
+                                            now: model.now, footer: footers[i],
+                                            reserveFooter: footers.contains { !$0.isEmpty })
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                                     .gridCellColumns(rows[index].count == 1 ? 2 : 1)
                             }
@@ -273,6 +286,14 @@ enum Style {
         return f.string(from: date)
     }
 
+    static func extraText(_ section: SectionState) -> String {
+        let value = section.remaining.formatted(.number.precision(.fractionLength(0...2)))
+        if section.name.hasPrefix("subscription") {
+            return "\(AppDelegate.sectionTitle(section.name)) \(value) 天"
+        }
+        return "\(AppDelegate.sectionTitle(section.name)) \(value)"
+    }
+
     static func friendlyError(_ provider: String, _ err: String) -> String {
         if err.contains("未配置阿里云 AccessKey") {
             return "还没有填写阿里云 AccessKey，请在服务页填写。"
@@ -372,6 +393,8 @@ struct SectionCard: View {
     let section: SectionState
     let points: [HistoryPoint]
     let now: Date
+    var footer = ""
+    var reserveFooter = false
 
     var body: some View {
         let unlimited = section.usedPct < 0
@@ -399,8 +422,8 @@ struct SectionCard: View {
                 HStack(spacing: 4) {
                     Text(chartLabel)
                     Spacer(minLength: 4)
-                    if let reset = section.resetAt, reset > now {
-                        Text(resetLabel(reset) + " " + expiryWord)
+                    if section.name == "addon-credits", let reset = section.resetAt, reset > now {
+                        Text(Style.resetChip(reset, now: now) + " 到期")
                     }
                 }
                 .font(.caption2)
@@ -410,7 +433,9 @@ struct SectionCard: View {
                 Spacer(minLength: 0)
                 UsageBar(pct: section.availablePct, color: tint)
             }
-            Text(footer).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            if reserveFooter {
+                Text(footer.isEmpty ? " " : footer).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
         }
     }
 
@@ -468,9 +493,51 @@ struct SectionCard: View {
         }
     }
 
-    private func resetLabel(_ reset: Date) -> String {
+    static func footer(_ section: SectionState, extras: [SectionState], now: Date) -> String {
+        var parts = extras.map(Style.extraText)
+        if section.name == "addon-credits", let reset = section.resetAt, reset > now {
+            parts.insert(Style.countdown(to: reset, now: now).replacingOccurrences(of: "重置", with: "到期"), at: 0)
+        }
+        return parts.joined(separator: " · ")
+    }
+}
+
+struct ProviderHeader: View {
+    let provider: String
+    var resets: [SectionState] = []
+    var now = Date()
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: Style.providerIcon(provider)).foregroundStyle(.secondary)
+            Text(Style.providerTitle(provider)).font(.callout.weight(.semibold)).foregroundStyle(.secondary)
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 1) {
+                ForEach(resets, id: \.name) { s in
+                    if let reset = s.resetAt {
+                        Text(resetText(s, reset))
+                    }
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .fixedSize()
+        }
+        .padding(.top, 2)
+    }
+
+    private func resetText(_ section: SectionState, _ reset: Date) -> String {
+        let prefix = resets.count > 1
+            ? AppDelegate.sectionTitle(section.name).replacingOccurrences(of: "额度", with: "") + " "
+            : ""
+        let left = Style.countdown(to: reset, now: now).replacingOccurrences(of: "重置", with: "")
+        return "\(prefix)\(resetLabel(section.name, reset)) 重置 · \(left)"
+    }
+
+    private func resetLabel(_ name: String, _ reset: Date) -> String {
         let f = DateFormatter()
-        switch section.name {
+        switch name {
         case "5-hour quota":
             f.dateFormat = "HH:mm"
         case "1-week quota":
@@ -480,44 +547,6 @@ struct SectionCard: View {
             return Style.resetChip(reset, now: now)
         }
         return f.string(from: reset)
-    }
-
-    private var expiryWord: String {
-        section.name == "addon-credits" ? "到期" : "重置"
-    }
-
-    private var footer: String {
-        var parts: [String] = []
-        if let reset = section.resetAt, reset > now {
-            parts.append(Style.countdown(to: reset, now: now).replacingOccurrences(of: "重置", with: expiryWord))
-        }
-        return parts.isEmpty ? " " : parts.joined(separator: " · ")
-    }
-}
-
-struct ProviderHeader: View {
-    let provider: String
-    var extras: [SectionState] = []
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: Style.providerIcon(provider)).foregroundStyle(.secondary)
-            Text(Style.providerTitle(provider)).font(.callout.weight(.semibold)).foregroundStyle(.secondary)
-            Spacer(minLength: 4)
-            ForEach(extras, id: \.name) { e in
-                Chip(text: chipText(e))
-                    .fixedSize()
-            }
-        }
-        .padding(.top, 2)
-    }
-
-    private func chipText(_ section: SectionState) -> String {
-        let value = section.remaining.formatted(.number.precision(.fractionLength(0...2)))
-        if section.name.hasPrefix("subscription") {
-            return "\(AppDelegate.sectionTitle(section.name)) \(value) 天"
-        }
-        return "\(AppDelegate.sectionTitle(section.name)) \(value)"
     }
 }
 
