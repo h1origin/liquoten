@@ -464,6 +464,37 @@ struct SectionCard: View {
     }
 }
 
+struct ProviderLogo: View {
+    let provider: String
+    var size: CGFloat = 16
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        if let image = Self.image(provider, dark: scheme == .dark) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: Style.providerIcon(provider))
+                .font(.system(size: size * 0.8))
+                .foregroundStyle(.secondary)
+                .frame(width: size, height: size)
+        }
+    }
+
+    static func image(_ provider: String, dark: Bool) -> NSImage? {
+        let name = provider == "qodercn" ? "qoder" : provider
+        for candidate in dark ? [name + "-dark", name] : [name] {
+            if let url = Bundle.main.url(forResource: candidate, withExtension: "pdf", subdirectory: "logos"),
+               let image = NSImage(contentsOf: url) {
+                return image
+            }
+        }
+        return nil
+    }
+}
+
 struct ProviderHeader: View {
     let provider: String
     var resets: [SectionState] = []
@@ -471,7 +502,7 @@ struct ProviderHeader: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: Style.providerIcon(provider)).foregroundStyle(.secondary)
+            ProviderLogo(provider: provider, size: 16)
             Text(Style.providerTitle(provider)).font(.callout.weight(.semibold)).foregroundStyle(.secondary)
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 1) {
@@ -747,10 +778,9 @@ struct ServiceRow: View {
                         model.draggingProvider = info.name
                         return NSItemProvider(object: info.name as NSString)
                     }
-                Image(systemName: Style.providerIcon(info.name))
-                    .font(.title3)
-                    .foregroundStyle(info.enabled ? Color.accentColor : .secondary)
-                    .frame(width: 22)
+                ProviderLogo(provider: info.name, size: 22)
+                    .saturation(info.enabled ? 1 : 0)
+                    .opacity(info.enabled ? 1 : 0.6)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(Style.providerTitle(info.name)).font(.callout.weight(.semibold))
                     Text(Style.providerDescription(info.name))

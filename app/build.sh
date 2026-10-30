@@ -47,6 +47,7 @@ iconutil -c icns -o "$APP/Contents/Resources/AppIcon.icns" "$TMP/AppIcon.iconset
 
 echo "==> 组装 bundle"
 cp app/Info.plist "$APP/Contents/Info.plist"
+cp -R app/logos "$APP/Contents/Resources/logos"
 if [ -n "${VERSION:-}" ]; then
   plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
   plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
