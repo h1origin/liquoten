@@ -6,6 +6,9 @@ struct SectionState: Decodable {
     let usedPct: Double
     let remaining: Double
     let resetAt: Date?
+
+    // 剩余可用百分比；无百分比语义时为 -1。
+    var availablePct: Double { usedPct < 0 ? -1 : min(max(100 - usedPct, 0), 100) }
 }
 
 struct BalanceState: Decodable {
@@ -57,6 +60,8 @@ func liquotenDecoder() -> JSONDecoder {
 struct HistoryPoint {
     let time: Date
     let usedPct: Double
+
+    var availablePct: Double { min(max(100 - usedPct, 0), 100) }
 }
 
 private struct HistoryEntry: Decodable {

@@ -461,7 +461,7 @@ func logBalance(bal providers.Balance) {
 			parts = append(parts, fmt.Sprintf("%s=无限制", s.Name))
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%s=%.1f%%", s.Name, s.UsedPct))
+		parts = append(parts, fmt.Sprintf("%s=剩余%.1f%%", s.Name, max(0, 100-s.UsedPct)))
 	}
 	log.Printf("%s: %s", bal.Provider, strings.Join(parts, " "))
 }

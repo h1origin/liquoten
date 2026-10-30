@@ -69,8 +69,8 @@ final class DashboardModel: ObservableObject {
         balances.filter { $0.error?.isEmpty ?? true }.flatMap(\.sections).filter { $0.usedPct >= 0 }
     }
 
-    var peakUsage: Double? {
-        okSections.map(\.usedPct).max()
+    var lowestAvailable: Double? {
+        okSections.map(\.availablePct).min()
     }
 
     var errorCount: Int {
@@ -167,19 +167,19 @@ struct DashboardView: View {
 }
 
 enum Style {
-    static func color(_ pct: Double) -> Color {
-        switch pct {
-        case 90...: return .red
-        case 70..<90: return .orange
+    static func color(available: Double) -> Color {
+        switch available {
+        case ...10: return .red
+        case ...30: return .orange
         default: return .blue
         }
     }
 
-    static func status(_ pct: Double?) -> String {
-        guard let pct else { return "暂无数据" }
-        switch pct {
-        case 90...: return "紧张"
-        case 70..<90: return "注意"
+    static func status(available: Double?) -> String {
+        guard let available else { return "暂无数据" }
+        switch available {
+        case ...10: return "紧张"
+        case ...30: return "注意"
         default: return "充足"
         }
     }
@@ -323,11 +323,11 @@ struct HeaderView: View {
     @ObservedObject var model: DashboardModel
 
     var body: some View {
-        let peak = model.peakUsage
-        let tint = peak.map(Style.color) ?? .secondary
+        let lowest = model.lowestAvailable
+        let tint = lowest.map { Style.color(available: $0) } ?? .secondary
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("所有额度中最高已用").font(.caption).foregroundStyle(.secondary)
+                Text("所有额度中最低剩余").font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button(action: model.onRefresh) {
                     HStack(spacing: 4) {
@@ -347,12 +347,12 @@ struct HeaderView: View {
                 Image(systemName: "gauge.with.dots.needle.33percent")
                     .font(.title2)
                     .foregroundStyle(tint)
-                Text(peak.map { "\(Int($0.rounded()))" } ?? "--")
+                Text(lowest.map { "\(Int($0.rounded()))" } ?? "--")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                if peak != nil {
+                if lowest != nil {
                     Text("%").font(.title3).foregroundStyle(.secondary)
                 }
-                Text(Style.status(peak)).font(.title3.weight(.medium)).foregroundStyle(tint)
+                Text(Style.status(available: lowest)).font(.title3.weight(.medium)).foregroundStyle(tint)
             }
             HStack(spacing: 6) {
                 Chip(text: "\(model.balances.count) 个服务")
@@ -375,7 +375,7 @@ struct SectionCard: View {
 
     var body: some View {
         let unlimited = section.usedPct < 0
-        let tint = unlimited ? Color.green : Style.color(section.usedPct)
+        let tint = unlimited ? Color.green : Style.color(available: section.availablePct)
         Card(fillHeight: true) {
             HStack(spacing: 5) {
                 Circle().fill(tint).frame(width: 7, height: 7)
@@ -387,10 +387,10 @@ struct SectionCard: View {
                 if unlimited {
                     Text("无限制").font(.system(size: 26, weight: .semibold, design: .rounded))
                 } else {
-                    Text("\(Int(section.usedPct.rounded()))")
+                    Text("\(Int(section.availablePct.rounded()))")
                         .font(.system(size: 30, weight: .semibold, design: .rounded))
                     Text("%").font(.callout).foregroundStyle(.secondary)
-                    Text("已用").font(.caption).foregroundStyle(.secondary)
+                    Text("剩余").font(.caption).foregroundStyle(.secondary)
                 }
             }
             .lineLimit(1)
@@ -408,7 +408,7 @@ struct SectionCard: View {
                 .lineLimit(1)
                 chart
                 Spacer(minLength: 0)
-                UsageBar(pct: section.usedPct, color: tint)
+                UsageBar(pct: section.availablePct, color: tint)
             }
             Text(footer).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         }
@@ -447,11 +447,11 @@ struct SectionCard: View {
     }
 
     @ViewBuilder private var chart: some View {
-        let tint = Style.color(section.usedPct)
+        let tint = Style.color(available: section.availablePct)
         switch section.name {
         case "5-hour quota":
             MinuteLine(points: points, start: window.start, end: window.end, now: now,
-                       current: section.usedPct, color: tint)
+                       current: section.availablePct, color: tint)
                 .frame(height: 76)
         case "1-week quota":
             DayBars(points: points, start: window.start, days: 7, now: now, current: section.usedPct,
@@ -488,9 +488,6 @@ struct SectionCard: View {
 
     private var footer: String {
         var parts: [String] = []
-        if section.usedPct >= 0 {
-            parts.append("剩余 \(Int((100 - section.usedPct).rounded()))%")
-        }
         if let reset = section.resetAt, reset > now {
             parts.append(Style.countdown(to: reset, now: now).replacingOccurrences(of: "重置", with: expiryWord))
         }
@@ -556,7 +553,7 @@ struct Sparkline: View {
             } else {
                 let pts = visible.map { p -> CGPoint in
                     let x = geo.size.width * CGFloat(p.time.timeIntervalSince(start) / window)
-                    let y = geo.size.height * (1 - CGFloat(min(max(p.usedPct, 0), 100) / 100))
+                    let y = geo.size.height * (1 - CGFloat(p.availablePct / 100))
                     return CGPoint(x: x, y: max(1, min(geo.size.height - 1, y)))
                 }
                 ZStack {
@@ -944,12 +941,12 @@ struct MinuteLine: View {
             let x = { (t: Date) -> CGFloat in gutter + (w - gutter) * CGFloat(min(max(t.timeIntervalSince(start) / span, 0), 1)) }
             let y = { (v: Double) -> CGFloat in h - 1 - (h - 6) * CGFloat(min(max(v, 0), 100) / 100) }
             let steps: [CGPoint] = {
-                var out = [CGPoint(x: x(start), y: y(0))]
-                var last = 0.0
+                var out = [CGPoint(x: x(start), y: y(100))]
+                var last = 100.0
                 for p in inWindow {
                     out.append(CGPoint(x: x(p.time), y: y(last)))
-                    out.append(CGPoint(x: x(p.time), y: y(p.usedPct)))
-                    last = p.usedPct
+                    out.append(CGPoint(x: x(p.time), y: y(p.availablePct)))
+                    last = p.availablePct
                 }
                 out.append(CGPoint(x: x(now), y: y(last)))
                 out.append(CGPoint(x: x(now), y: y(current)))
@@ -978,8 +975,8 @@ struct MinuteLine: View {
                         .position(x: (gutter - 4) / 2, y: y(Double(v)))
                 }
                 Path { p in
-                    p.move(to: CGPoint(x: x(now), y: y(0)))
-                    p.addLine(to: CGPoint(x: w, y: y(0)))
+                    p.move(to: CGPoint(x: x(now), y: y(current)))
+                    p.addLine(to: CGPoint(x: w, y: y(current)))
                 }
                 .stroke(Color.primary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
                 Path { p in

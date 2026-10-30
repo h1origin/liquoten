@@ -287,7 +287,7 @@ func (e *Engine) levels(provider, section string) []float64 {
 }
 
 func (e *Engine) message(provider string, sec providers.Section, level float64) string {
-	msg := fmt.Sprintf("%s %s剩余不到 %g%%（已用 %.0f%%）", displayName(provider), sectionName(sec.Name), 100-level, sec.UsedPct)
+	msg := fmt.Sprintf("%s %s剩余不到 %g%%（当前剩余 %.0f%%）", displayName(provider), sectionName(sec.Name), 100-level, max(0, 100-sec.UsedPct))
 	if !sec.ResetAt.IsZero() {
 		msg += "，" + e.formatTime(sec.ResetAt) + " 重置"
 	}

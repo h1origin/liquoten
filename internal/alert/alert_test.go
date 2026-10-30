@@ -70,7 +70,7 @@ func TestRemainingLevels(t *testing.T) {
 	check(30)
 	check(55)
 	check(60)
-	if len(r.fired) != 1 || r.fired[0] != "额度提醒: Claude 5 小时额度剩余不到 50%（已用 55%），14:30 重置" {
+	if len(r.fired) != 1 || r.fired[0] != "额度提醒: Claude 5 小时额度剩余不到 50%（当前剩余 45%），14:30 重置" {
 		t.Fatalf("fired = %q", r.fired)
 	}
 	check(85)
@@ -88,7 +88,7 @@ func TestRemainingLevels(t *testing.T) {
 	if err := e.Check([]providers.Balance{week}); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.fired) != 4 || r.fired[3] != "额度提醒: Claude 每周额度剩余不到 10%（已用 92%），10月18日 08:00 重置" {
+	if len(r.fired) != 4 || r.fired[3] != "额度提醒: Claude 每周额度剩余不到 10%（当前剩余 8%），10月18日 08:00 重置" {
 		t.Fatalf("自定义阈值作为额外提醒点: %q", r.fired)
 	}
 }
@@ -400,7 +400,7 @@ func TestFileNotifierThroughEngine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "百炼 5 小时额度剩余不到 20%（已用 85%）") {
+	if !strings.Contains(string(data), "百炼 5 小时额度剩余不到 20%（当前剩余 15%）") {
 		t.Fatalf("事件内容不符: %s", data)
 	}
 }

@@ -92,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let ordered = model.orderedBalances
         button.toolTip = Self.summaryTitle(ordered, daemonMissing: daemon.isMissing)
         button.image = Self.statusImage(balances, badge: model.update != nil)
-        if let pct = Self.topUsage(ordered) {
+        if let pct = Self.topAvailable(ordered) {
             button.attributedTitle = NSAttributedString(string: " \(pct)%", attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
             ])
@@ -140,7 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 parts.append("\(displayName(b.provider)) 出错")
                 continue
             }
-            let sections = b.sections.filter { $0.usedPct >= 0 }.map { "\(shortName($0.name)) \(Int($0.usedPct.rounded()))%" }
+            let sections = b.sections.filter { $0.usedPct >= 0 }.map { "\(shortName($0.name)) 剩余 \(Int($0.availablePct.rounded()))%" }
             if sections.isEmpty { continue }
             if balances.count > 1 {
                 parts.append("\(displayName(b.provider)) " + sections.joined(separator: " "))
@@ -153,11 +153,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return title.count > 48 ? String(title.prefix(45)) + "…" : title
     }
 
-    // 排在最上面的服务中最紧张那一项的已用百分比；该服务出错或没有百分比数据时不显示。
-    static func topUsage(_ ordered: [BalanceState]) -> Int? {
+    // 排在最上面的服务中最紧张那一项的剩余百分比；该服务出错或没有百分比数据时不显示。
+    static func topAvailable(_ ordered: [BalanceState]) -> Int? {
         guard let top = ordered.first, top.error?.isEmpty ?? true,
-              let used = top.sections.map(\.usedPct).filter({ $0 >= 0 }).max() else { return nil }
-        return Int(used.rounded())
+              let available = top.sections.filter({ $0.usedPct >= 0 }).map(\.availablePct).min() else { return nil }
+        return Int(available.rounded())
     }
 
     static func displayName(_ provider: String) -> String {
@@ -204,16 +204,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - 菜单栏图标
 
     static func statusImage(_ balances: [BalanceState], badge: Bool = false) -> NSImage {
-        let used = balances.filter { $0.error?.isEmpty ?? true }
-            .flatMap(\.sections).map(\.usedPct).filter { $0 >= 0 }.max()
-        guard let used else { return Gourd.menuBarImage(remaining: nil, tint: nil, badge: badge) }
+        let available = balances.filter { $0.error?.isEmpty ?? true }
+            .flatMap(\.sections).filter { $0.usedPct >= 0 }.map(\.availablePct).min()
+        guard let available else { return Gourd.menuBarImage(remaining: nil, tint: nil, badge: badge) }
         let tint: NSColor?
-        switch used {
-        case 90...: tint = .systemRed
-        case 70..<90: tint = .systemOrange
+        switch available {
+        case ...10: tint = .systemRed
+        case ...30: tint = .systemOrange
         default: tint = nil
         }
-        return Gourd.menuBarImage(remaining: max(0, 100 - used), tint: tint, badge: badge)
+        return Gourd.menuBarImage(remaining: available, tint: tint, badge: badge)
     }
 
     // MARK: - 更新

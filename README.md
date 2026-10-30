@@ -23,7 +23,7 @@ liquoten shows how much of each LLM plan you have used as a water droplet in the
 ## ✨ Features
 
 - **Everything in one place**: Claude Code, ChatGPT Codex, Alibaba Cloud Bailian (Model Studio) Token Plan and Qoder all appear in one panel.
-- **At-a-glance menu bar**: the droplet's water level and color (blue → orange → red) follow your tightest quota, with the used percentage shown next to it.
+- **At-a-glance menu bar**: the droplet's water level and color (blue → orange → red) follow your tightest quota, with the remaining percentage shown next to it.
 - **Trends**: each quota card has a usage chart (per-minute for 5-hour windows, per-day for weekly and monthly windows) and a reset countdown.
 - **Notifications**: you get a macOS notification when a quota drops below 50% and 20% remaining (configurable), when a provider keeps failing, and when a Codex reset credit is about to expire.
 - **In-app updates**: downloads the release dmg, checks its SHA-256, replaces the app and relaunches itself. Browser-downloaded first installs still need the one-time Gatekeeper approval.
