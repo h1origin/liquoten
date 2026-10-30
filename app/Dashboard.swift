@@ -229,11 +229,10 @@ enum Style {
 
     static func providerDescription(_ provider: String) -> String {
         switch provider {
-        case "bailian": return "用阿里云 AccessKey 查询 Token Plan 用量（每 30 分钟）、加购额度和套餐到期时间（每 6 小时）。建议使用只授予百炼权限的 RAM 子账号。月额度用满后加购额度改为每次轮询查询。"
-        case "claudecode": return "读取 Claude Code 状态栏传来的订阅用量（Pro / Max）。需要把 Claude Code 的状态栏命令设为 liquoten。"
-        case "codex": return "读取 Codex 本地会话记录（~/.codex/sessions）里的订阅用量和 credits 余额，并用 Codex 的登录状态每 30 分钟校正一次、每 6 小时查询一次重置卡。无需额外配置。"
-        case "qoder": return "用个人访问令牌查询 qoder.com 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key，每 30 分钟查询一次。"
-        case "qodercn": return "用个人访问令牌查询 qoder.com.cn 账号本计费周期的 Credits 用量和加购余额。开启时需要填写 API Key，每 30 分钟查询一次。"
+        case "bailian": return "用阿里云 AccessKey 查询用量"
+        case "claudecode": return "读取 Claude Code 状态栏的用量"
+        case "codex": return "读取 Codex 本地记录，无需配置"
+        case "qoder", "qodercn": return "用 API Key 查询 Credits 用量"
         default: return ""
         }
     }
@@ -755,10 +754,6 @@ struct ServicesView: View {
                     .opacity(model.draggingProvider == info.name ? 0.4 : 1)
                     .onDrop(of: [.text], delegate: ReorderDropDelegate(model: model, target: info.name))
             }
-            Text("按住左侧手柄上下拖动调整顺序，面板按此顺序显示，排在最上面的服务用量会显示在菜单栏。开关会写入配置文件 ~/.config/liquoten/config.toml，并立即重新查询。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .onDrop(of: [.text], isTargeted: nil) { _ in
             model.draggingProvider = nil
@@ -784,7 +779,7 @@ struct ServiceRow: View {
                     .foregroundStyle(.tertiary)
                     .frame(width: 14, height: 22)
                     .contentShape(Rectangle())
-                    .help("拖动调整顺序")
+                    .help("拖动调整顺序，最上面的服务显示在菜单栏")
                     .onDrag {
                         model.draggingProvider = info.name
                         return NSItemProvider(object: info.name as NSString)
@@ -869,7 +864,7 @@ struct ServiceRow: View {
                         .disabled(model.togglingProvider != nil)
                     }
                 }
-                Text("建议使用只授予百炼权限的 RAM 子账号。AccessKey 以明文保存在 ~/.config/liquoten/config.toml，关闭服务时删除。")
+                Text("建议用只授权百炼的子账号，明文保存在本机配置文件")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -923,7 +918,7 @@ struct ServiceRow: View {
                     copied = true
                 }
                 .controlSize(.small)
-                Text("粘贴到 ~/.claude/settings.json 里，然后在 Claude Code 里发一句话即可有数据。")
+                Text("粘贴到 ~/.claude/settings.json")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
