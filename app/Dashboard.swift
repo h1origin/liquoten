@@ -230,7 +230,7 @@ enum Style {
     static func providerDescription(_ provider: String) -> String {
         switch provider {
         case "bailian": return "用阿里云 AccessKey 查询用量"
-        case "claudecode": return "读取 Claude Code 状态栏的用量"
+        case "claudecode": return "需要打开 Claude Code，使用时更新用量"
         case "codex": return "读取 Codex 本地记录，无需配置"
         case "qoder", "qodercn": return "用 API Key 查询 Credits 用量"
         default: return ""
@@ -240,12 +240,7 @@ enum Style {
     static func claudeStatusLineSnippet() -> String {
         let path = Bundle.main.resourceURL?.appendingPathComponent("liquoten").path
             ?? "/Applications/liquoten.app/Contents/Resources/liquoten"
-        return """
-        "statusLine": {
-          "type": "command",
-          "command": "\(path) statusline"
-        }
-        """
+        return "/statusline 把状态栏命令设为 \(path) statusline"
     }
 
     static func historyLabel(_ section: String) -> String {
@@ -294,6 +289,9 @@ enum Style {
     }
 
     static func friendlyError(_ provider: String, _ err: String) -> String {
+        if err.contains("statusLine 配置为") {
+            return "还没有数据，需要先开启 Claude Code 状态栏。"
+        }
         if err.contains("未配置阿里云 AccessKey") {
             return "还没有填写阿里云 AccessKey，请在服务页填写。"
         }
@@ -910,18 +908,20 @@ struct ServiceRow: View {
     @ViewBuilder private var actions: some View {
         switch info.name {
         case "claudecode":
-            VStack(alignment: .leading, spacing: 4) {
-                Button(copied ? "已复制" : "复制状态栏配置") {
-                    let pb = NSPasteboard.general
-                    pb.clearContents()
-                    pb.setString(Style.claudeStatusLineSnippet(), forType: .string)
-                    copied = true
+            if !(model.balance(info.name).map { $0.error?.isEmpty ?? true } ?? false) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button(copied ? "已复制" : "复制设置指令") {
+                        let pb = NSPasteboard.general
+                        pb.clearContents()
+                        pb.setString(Style.claudeStatusLineSnippet(), forType: .string)
+                        copied = true
+                    }
+                    .controlSize(.small)
+                    Text("在 Claude Code 里粘贴并发送，完成后再发一句话即可看到用量")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .controlSize(.small)
-                Text("粘贴到 ~/.claude/settings.json")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         default:
             EmptyView()
