@@ -453,6 +453,10 @@ func logBalance(bal providers.Balance) {
 	}
 	parts := make([]string, 0, len(bal.Sections))
 	for _, s := range bal.Sections {
+		if strings.HasPrefix(s.Name, "official-") {
+			parts = append(parts, fmt.Sprintf("%s=%s", s.Name, s.ResetAt.Local().Format("01-02 15:04")))
+			continue
+		}
 		if s.UsedPct < 0 && s.Remaining >= 0 {
 			parts = append(parts, fmt.Sprintf("%s=%g", s.Name, s.Remaining))
 			continue

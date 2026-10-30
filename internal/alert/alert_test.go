@@ -456,3 +456,59 @@ func TestPruneExpiredAlertKeys(t *testing.T) {
 }
 
 func itoa(v int64) string { return strconv.FormatInt(v, 10) }
+
+func TestOfficialResetAlert(t *testing.T) {
+	dir := t.TempDir()
+	r := &recorder{}
+	now := time.Date(2026, 10, 28, 15, 0, 0, 0, time.Local)
+	e, err := New(nil, nil, dir, r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.now = func() time.Time { return now }
+	bal := func(name string, at time.Time) providers.Balance {
+		return providers.Balance{
+			Provider:  "codex",
+			FetchedAt: now,
+			Sections:  []providers.Section{{Name: name, UsedPct: -1, Remaining: -1, ResetAt: at}},
+		}
+	}
+
+	old := now.Add(-25 * time.Hour)
+	if err := e.Check([]providers.Balance{bal("official-reset", old)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 0 {
+		t.Fatalf("fired = %v, want none for announcements older than 24h", r.fired)
+	}
+
+	recent := time.Date(2026, 10, 28, 10, 42, 0, 0, time.Local)
+	for range 2 {
+		if err := e.Check([]providers.Balance{bal("official-reset", recent)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(r.fired) != 1 || r.fired[0] != "额度提醒: Codex 官方于 10:42 宣布重置额度" {
+		t.Fatalf("fired = %v", r.fired)
+	}
+
+	e2, err := New(nil, nil, dir, r.notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e2.now = func() time.Time { return now }
+	if err := e2.Check([]providers.Balance{bal("official-reset", recent)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 1 {
+		t.Fatalf("fired = %v, want no repeat after restart", r.fired)
+	}
+
+	card := time.Date(2026, 10, 28, 12, 0, 0, 0, time.Local)
+	if err := e2.Check([]providers.Balance{bal("official-reset-card", card)}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.fired) != 2 || r.fired[1] != "额度提醒: Codex 官方于 12:00 宣布发放重置卡" {
+		t.Fatalf("fired = %v", r.fired)
+	}
+}

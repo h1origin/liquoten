@@ -133,8 +133,9 @@ struct DashboardView: View {
             if let err = b.error, !err.isEmpty {
                 ErrorCard(model: model, balance: b, message: err)
             } else {
-                let balances = b.sections.filter { $0.usedPct < 0 && $0.remaining >= 0 }
-                let quotas = b.sections.filter { !($0.usedPct < 0 && $0.remaining >= 0) }
+                let official = b.sections.filter { $0.name == "official-reset" }
+                let balances = b.sections.filter { $0.usedPct < 0 && $0.remaining >= 0 } + official
+                let quotas = b.sections.filter { !($0.usedPct < 0 && $0.remaining >= 0) && !$0.name.hasPrefix("official-") }
                 ProviderHeader(provider: b.provider,
                                resets: quotas.filter { $0.name != "addon-credits" && ($0.resetAt ?? .distantPast) > model.now },
                                now: model.now)
@@ -264,6 +265,11 @@ enum Style {
     }
 
     static func extraText(_ section: SectionState) -> String {
+        if section.name == "official-reset" {
+            let f = DateFormatter()
+            f.dateFormat = "M/d HH:mm"
+            return "官方上次重置 " + (section.resetAt.map(f.string) ?? "--")
+        }
         let value = section.remaining.formatted(.number.precision(.fractionLength(0...2)))
         if section.name.hasPrefix("subscription") {
             return "\(AppDelegate.sectionTitle(section.name)) \(value) 天"

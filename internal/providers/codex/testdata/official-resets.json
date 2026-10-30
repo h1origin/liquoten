@@ -1,0 +1,62 @@
+{
+  "resets": [
+    {
+      "id": "2115273064481218829",
+      "occurredAtUtc": "2026-10-28T06:29:38.000Z",
+      "announcementAtUtc": "2026-10-28T02:42:53.000Z",
+      "type": "global",
+      "announcementUrl": "https://x.com/thsottiaux/status/2115330127886463244",
+      "text": "And it's done. See you tomorrow for some good news. https://t.co/WhJle2cWRG",
+      "confirmedAtUtc": "2026-10-28T06:29:38.000Z",
+      "textI18n": {
+        "zh-CN": "完成了。明天见，带来一些好消息。https://t.co/WhJle2cWRG"
+      }
+    },
+    {
+      "id": "2114588174249071102",
+      "occurredAtUtc": "2026-10-26T05:21:22.000Z",
+      "announcementAtUtc": "2026-10-26T05:21:22.000Z",
+      "type": "global",
+      "announcementUrl": "https://x.com/thsottiaux/status/2114588174249071102",
+      "text": "Day 21/ Wonder what happens the remaining seven days. But today is a reset.",
+      "confirmedAtUtc": null,
+      "textI18n": {
+        "zh-CN": "第 21 天 / 想知道剩下的七天会发生什么。但今天是一个重置。"
+      }
+    },
+    {
+      "id": "2107913674593644711",
+      "occurredAtUtc": "2026-10-08T03:44:55.000Z",
+      "announcementAtUtc": "2026-10-07T19:19:17.000Z",
+      "type": "banked",
+      "announcementUrl": "https://x.com/thsottiaux/status/2108040921044639779",
+      "text": "Confirmed landed across all accounts. How are we doing so far? https://t.co/tzw7dNX4pN",
+      "confirmedAtUtc": "2026-10-08T03:44:55.000Z",
+      "textI18n": {
+        "zh-CN": "已确认在所有账户中登陆。到目前为止，我们的表现如何？https://t.co/tzw7dNX4pN"
+      }
+    }
+  ],
+  "forecast": {
+    "status": "available",
+    "p24": 0.4121472147414391,
+    "p48": 0.6544291028637523,
+    "sampleSize": 8,
+    "meanDays": 1.8822511574074074,
+    "cv": 0.3073552350714735,
+    "confidence": "medium",
+    "scheduledFor": null,
+    "latest": "2026-10-28T06:29:38.000Z",
+    "total": 68
+  },
+  "stats": {
+    "total": 68,
+    "avgIntervalDays": 6.0612227059148704,
+    "medianInterval30Days": 1.8765740740740742,
+    "banked": 7,
+    "pendingReviewEvents": 74,
+    "longestWaitDays": 67.74240740740741,
+    "latest": "2026-10-28T06:29:38.000Z"
+  },
+  "scheduled": null
+}

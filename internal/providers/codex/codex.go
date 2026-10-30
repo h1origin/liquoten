@@ -40,18 +40,24 @@ const resetCreditsInterval = 6 * time.Hour
 var errNoAuth = errors.New("没有 Codex 登录凭据")
 
 type Provider struct {
-	home               string
-	now                func() time.Time
-	cache              map[string]cached
-	timeout            time.Duration
-	baseURL            string
-	lastUsageAttempt   time.Time
-	liveUsage          *rateLimits
-	liveUsageAt        time.Time
-	lastResetAttempt   time.Time
-	resetCredits       []resetCredit
-	resetCreditsLoaded bool
-	serverResetCount   *int
+	home                string
+	now                 func() time.Time
+	cache               map[string]cached
+	timeout             time.Duration
+	baseURL             string
+	lastUsageAttempt    time.Time
+	liveUsage           *rateLimits
+	liveUsageAt         time.Time
+	lastResetAttempt    time.Time
+	resetCredits        []resetCredit
+	resetCreditsLoaded  bool
+	serverResetCount    *int
+	feedURL             string
+	lastOfficialAttempt time.Time
+	officialRetryAt     time.Time
+	officialTimeout     time.Duration
+	official            officialLatest
+	officialLoaded      bool
 }
 
 type cached struct {
@@ -102,7 +108,9 @@ type resetCredit struct {
 
 func init() {
 	providers.Register(Name, func(opts providers.Options) (providers.Provider, error) {
-		return newProvider(DefaultHome(), opts.Timeout), nil
+		p := newProvider(DefaultHome(), opts.Timeout)
+		p.feedURL = officialFeedURL
+		return p, nil
 	})
 }
 
@@ -126,11 +134,12 @@ func newProvider(home string, timeout time.Duration) *Provider {
 		timeout = defaultTimeout
 	}
 	return &Provider{
-		home:    home,
-		now:     time.Now,
-		cache:   map[string]cached{},
-		timeout: timeout,
-		baseURL: defaultBaseURL,
+		home:            home,
+		now:             time.Now,
+		cache:           map[string]cached{},
+		timeout:         timeout,
+		baseURL:         defaultBaseURL,
+		officialTimeout: officialTimeout,
 	}
 }
 
@@ -139,6 +148,8 @@ func (p *Provider) Name() string { return Name }
 func (p *Provider) RefreshNow() {
 	p.lastUsageAttempt = time.Time{}
 	p.lastResetAttempt = time.Time{}
+	p.lastOfficialAttempt = time.Time{}
+	p.officialRetryAt = time.Time{}
 }
 
 func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
@@ -151,6 +162,7 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 	}
 	p.refreshLiveUsage(ctx, now)
 	p.refreshResetCredits(ctx, now)
+	p.refreshOfficial(ctx, now)
 
 	var rl *rateLimits
 	var ts time.Time
@@ -181,6 +193,7 @@ func (p *Provider) Query(ctx context.Context) (providers.Balance, error) {
 			ResetAt:   earliest,
 		})
 	}
+	bal.Sections = append(bal.Sections, p.officialSections()...)
 	return bal, nil
 }
 

@@ -2,6 +2,7 @@
 //   - 每项额度剩余降到各提醒点（默认剩余 50%、20%）时各发一次通知，回升（新周期）后复位
 //   - [thresholds] 里按已用百分比配置的阈值作为额外提醒点
 //   - 查询连续失败 3 次告警一次，成功即复位
+//   - Codex 官方宣布重置或发放重置卡时通知一次（只通知 24 小时内的新公告）
 //   - 已告警状态落盘，daemon 重启后不会立即重复轰炸
 //   - 通知默认写入 notifications.jsonl，由 liquoten.app 投递系统通知
 package alert
@@ -91,6 +92,8 @@ const resetCreditsAlertWindow = 12 * time.Hour
 
 const expiryAlertWindow = 3 * 24 * time.Hour
 
+const officialAlertWindow = 24 * time.Hour
+
 // New 构造引擎。remaining 是剩余百分比提醒点；cacheDir 用于持久化告警状态；notify 为 nil 时静默（测试用）。
 func New(thresholds map[string]map[string]float64, remaining []float64, cacheDir string, notify Notifier) (*Engine, error) {
 	e := &Engine{
@@ -139,6 +142,11 @@ func (e *Engine) Check(balances []providers.Balance) error {
 					firstErr = err
 				}
 				continue
+			case "official-reset", "official-reset-card":
+				if err := e.checkOfficial(b.Provider, sec); err != nil && firstErr == nil {
+					firstErr = err
+				}
+				continue
 			case "addon-credits":
 				if err := e.checkAddonCredits(b.Provider, sec); err != nil && firstErr == nil {
 					firstErr = err
@@ -175,7 +183,7 @@ func (e *Engine) Check(balances []providers.Balance) error {
 }
 
 // expiryKinds 是按到期时间去重的提醒，键的最后一段是到期时间的 Unix 秒。
-var expiryKinds = map[string]bool{"reset-credits": true, "addon-credits-expire": true, "subscription": true}
+var expiryKinds = map[string]bool{"reset-credits": true, "addon-credits-expire": true, "subscription": true, "official-reset": true, "official-reset-card": true}
 
 const expiredKeyRetention = 7 * 24 * time.Hour
 
@@ -215,6 +223,26 @@ func (e *Engine) checkResetCredits(provider string, sec providers.Section) error
 	}
 	e.alerted[key] = true
 	msg := fmt.Sprintf("%s 有重置卡将于 %s 过期，可在 Codex 桌面 App 里使用", displayName(provider), e.formatTime(sec.ResetAt))
+	return e.fire("额度提醒", msg)
+}
+
+func (e *Engine) checkOfficial(provider string, sec providers.Section) error {
+	if sec.ResetAt.IsZero() {
+		return nil
+	}
+	age := e.now().Sub(sec.ResetAt)
+	if age < 0 || age >= officialAlertWindow {
+		return nil
+	}
+	key := fmt.Sprintf("%s|%s|%d", provider, sec.Name, sec.ResetAt.Unix())
+	if e.alerted[key] {
+		return nil
+	}
+	e.alerted[key] = true
+	msg := fmt.Sprintf("%s 官方于 %s 宣布重置额度", displayName(provider), e.formatTime(sec.ResetAt))
+	if sec.Name == "official-reset-card" {
+		msg = fmt.Sprintf("%s 官方于 %s 宣布发放重置卡", displayName(provider), e.formatTime(sec.ResetAt))
+	}
 	return e.fire("额度提醒", msg)
 }
 
