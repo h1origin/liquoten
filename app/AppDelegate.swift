@@ -207,12 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let available = balances.filter { $0.error?.isEmpty ?? true }
             .flatMap(\.sections).filter { $0.usedPct >= 0 }.map(\.availablePct).min()
         guard let available else { return Gourd.menuBarImage(remaining: nil, tint: nil, badge: badge) }
-        let tint: NSColor?
-        switch available {
-        case ...10: tint = .systemRed
-        case ...30: tint = .systemOrange
-        default: tint = nil
-        }
+        let tint: NSColor? = available < 20 ? .systemOrange : nil
         return Gourd.menuBarImage(remaining: available, tint: tint, badge: badge)
     }
 
